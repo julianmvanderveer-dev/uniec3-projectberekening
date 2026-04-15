@@ -6,211 +6,100 @@
   <title>{{ config.TOOL_NAAM }}</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: "Segoe UI", Arial, sans-serif;
-      background: #f3f4f6;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
-
-    .card {
-      background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 4px 24px rgba(0,0,0,.10);
-      padding: 40px 44px;
-      width: 100%;
-      max-width: 560px;
-    }
-
-    h1 {
-      font-size: 1.35rem;
-      font-weight: 700;
-      color: #111;
-      margin-bottom: 4px;
-    }
-
-    .subtitle {
-      font-size: .875rem;
-      color: #666;
-      margin-bottom: 28px;
-    }
-
-    /* Drop zone */
-    .drop-zone {
-      border: 2px dashed #c5cad3;
-      border-radius: 8px;
-      padding: 32px 20px;
-      text-align: center;
-      cursor: pointer;
-      transition: border-color .2s, background .2s;
-      background: #fafafa;
-      margin-bottom: 16px;
-    }
-    .drop-zone.drag-over {
-      border-color: #0078d4;
-      background: #e8f3fc;
-    }
+    body { font-family: "Segoe UI", Arial, sans-serif; background: #f3f4f6; min-height: 100vh;
+           display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,.10);
+            padding: 40px 44px; width: 100%; max-width: 560px; }
+    h1   { font-size: 1.35rem; font-weight: 700; color: #111; margin-bottom: 4px; }
+    .sub { font-size: .875rem; color: #666; margin-bottom: 28px; }
+    .drop-zone { border: 2px dashed #c5cad3; border-radius: 8px; padding: 32px 20px;
+                 text-align: center; cursor: pointer; transition: border-color .2s, background .2s;
+                 background: #fafafa; margin-bottom: 16px; }
+    .drop-zone.drag-over { border-color: #0078d4; background: #e8f3fc; }
     .drop-zone svg { margin-bottom: 10px; color: #999; }
-    .drop-zone p  { font-size: .9rem; color: #555; }
+    .drop-zone p   { font-size: .9rem; color: #555; }
     .drop-zone span { color: #0078d4; text-decoration: underline; cursor: pointer; }
-
-    /* Bestandenlijst */
-    #file-list { list-style: none; margin-bottom: 20px; }
-    #file-list li {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 7px 10px;
-      border-radius: 6px;
-      font-size: .875rem;
-      color: #333;
-    }
+    #file-list { list-style: none; margin-bottom: 16px; }
+    #file-list li { display: flex; align-items: center; justify-content: space-between;
+                    padding: 7px 10px; border-radius: 6px; font-size: .875rem; color: #333; }
     #file-list li:nth-child(odd) { background: #f7f8fa; }
     #file-list li .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    #file-list li button {
-      background: none;
-      border: none;
-      cursor: pointer;
-      color: #aaa;
-      font-size: 1rem;
-      line-height: 1;
-      padding: 0 4px;
-      flex-shrink: 0;
-    }
+    #file-list li button { background: none; border: none; cursor: pointer; color: #aaa;
+                           font-size: 1rem; line-height: 1; padding: 0 4px; flex-shrink: 0; }
     #file-list li button:hover { color: #e00; }
-
-    /* Foutmelding */
-    #error-box {
-      display: none;
-      background: #fff0f0;
-      border: 1px solid #fbb;
-      border-radius: 6px;
-      padding: 10px 14px;
-      font-size: .85rem;
-      color: #c00;
-      margin-bottom: 16px;
-    }
-
-    /* Knop */
-    .btn-primary {
-      width: 100%;
-      padding: 13px;
-      background: #0078d4;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background .2s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-    }
-    .btn-primary:hover:not(:disabled) { background: #005fa3; }
-    .btn-primary:disabled { background: #9cc3e8; cursor: not-allowed; }
-
-    /* Spinner */
-    .spinner {
-      display: none;
-      width: 18px; height: 18px;
-      border: 2px solid rgba(255,255,255,.4);
-      border-top-color: #fff;
-      border-radius: 50%;
-      animation: spin .7s linear infinite;
-    }
+    .field { margin-bottom: 16px; }
+    .field label { font-size: .85rem; color: #555; display: block; margin-bottom: 5px; }
+    .field input { width: 100%; padding: 9px 12px; border: 1px solid #d1d5db;
+                   border-radius: 6px; font-size: .9rem; color: #333; outline: none; }
+    .price-box { background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px;
+                 padding: 12px 16px; font-size: .875rem; color: #166534; margin-bottom: 18px; }
+    .price-box strong { font-size: 1rem; }
+    #error-box { display: none; background: #fff0f0; border: 1px solid #fbb; border-radius: 6px;
+                 padding: 10px 14px; font-size: .85rem; color: #c00; margin-bottom: 16px; }
+    .btn { width: 100%; padding: 13px; background: #0078d4; color: #fff; border: none;
+           border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer;
+           transition: background .2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .btn:hover:not(:disabled) { background: #005fa3; }
+    .btn:disabled { background: #9cc3e8; cursor: not-allowed; }
+    .spinner { display: none; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.4);
+               border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* Succes */
-    #success-box {
-      display: none;
-      background: #f0fff4;
-      border: 1px solid #6ee7a0;
-      border-radius: 6px;
-      padding: 10px 14px;
-      font-size: .875rem;
-      color: #166534;
-      margin-top: 14px;
-      text-align: center;
-    }
-
-    footer {
-      margin-top: 28px;
-      font-size: .78rem;
-      color: #bbb;
-      text-align: center;
-    }
-
     input[type="file"] { display: none; }
   </style>
 </head>
 <body>
 <div class="card">
   <h1>{{ config.TOOL_NAAM }}</h1>
-  <p class="subtitle">Sleep losse .uniec3 woningbestanden hieronder om ze samen te voegen tot één projectberekening.</p>
+  <p class="sub">Sleep losse .uniec3 woningbestanden hieronder om ze samen te voegen tot één projectberekening.</p>
 
   <div class="drop-zone" id="drop-zone">
     <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-      <path d="M12 16V4m0 0L8 8m4-4 4 4"/>
-      <path d="M20 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"/>
+      <path d="M12 16V4m0 0L8 8m4-4 4 4"/><path d="M20 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"/>
     </svg>
     <p>Sleep bestanden hierheen of <span id="browse-link">blader</span></p>
     <p style="font-size:.8rem;color:#aaa;margin-top:4px;">Alleen .uniec3 bestanden · Minimaal 2</p>
   </div>
   <input type="file" id="file-input" multiple accept=".uniec3">
-
   <ul id="file-list"></ul>
-  <div id="error-box"></div>
 
-  <div style="margin-bottom:16px;">
-    <label for="output-name" style="font-size:.85rem;color:#555;display:block;margin-bottom:5px;">Bestandsnaam uitvoer</label>
-    <input type="text" id="output-name" placeholder="projectberekening_2026-04-15"
-      style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem;color:#333;outline:none;">
+  <div class="field">
+    <label for="output-name">Bestandsnaam uitvoer (optioneel)</label>
+    <input type="text" id="output-name" placeholder="projectberekening_2026-04-16">
   </div>
 
-  <button class="btn-primary" id="merge-btn" disabled>
-    <span class="spinner" id="spinner"></span>
-    <span id="btn-label">Maak projectberekening</span>
-  </button>
+  <div class="price-box">
+    Prijs: <strong>€ {{ "%.2f"|format(config.PRICE_PER_MERGE) }} excl. BTW</strong>
+    (€ {{ "%.2f"|format(config.PRICE_PER_MERGE * (1 + config.VAT_RATE)) }} incl.) per samenvoeging.
+    Betaling via iDEAL — daarna directe download + factuur.
+  </div>
 
-  <div id="success-box">✓ Projectberekening aangemaakt — download gestart.</div>
+  <div id="error-box"></div>
 
-  {% if config.BEDRIJF or config.CONTACT %}
-  <footer>{{ config.BEDRIJF }}{% if config.BEDRIJF and config.CONTACT %} · {% endif %}{{ config.CONTACT }}</footer>
-  {% endif %}
+  <form id="upload-form" method="POST" action="/upload" enctype="multipart/form-data">
+    <input type="hidden" name="bestandsnaam" id="form-naam">
+    <button type="submit" class="btn" id="next-btn" disabled>
+      <span class="spinner" id="spinner"></span>
+      <span>Verder naar betaling →</span>
+    </button>
+  </form>
 </div>
 
 <script>
-  const dropZone   = document.getElementById("drop-zone");
-  const fileInput  = document.getElementById("file-input");
-  const fileList   = document.getElementById("file-list");
-  const mergeBtn   = document.getElementById("merge-btn");
-  const spinner    = document.getElementById("spinner");
-  const btnLabel   = document.getElementById("btn-label");
-  const errorBox   = document.getElementById("error-box");
-  const successBox = document.getElementById("success-box");
+  const dropZone = document.getElementById("drop-zone");
+  const fileInput = document.getElementById("file-input");
+  const fileList  = document.getElementById("file-list");
+  const nextBtn   = document.getElementById("next-btn");
+  const errorBox  = document.getElementById("error-box");
+  const form      = document.getElementById("upload-form");
+  let files = [];
 
-  let files = [];   // File objects
-
-  // ── Drag & drop ────────────────────────────────────────────────────────────
   dropZone.addEventListener("dragover",  e => { e.preventDefault(); dropZone.classList.add("drag-over"); });
   dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
-  dropZone.addEventListener("drop", e => {
-    e.preventDefault();
-    dropZone.classList.remove("drag-over");
-    addFiles([...e.dataTransfer.files]);
-  });
-
+  dropZone.addEventListener("drop", e => { e.preventDefault(); dropZone.classList.remove("drag-over"); addFiles([...e.dataTransfer.files]); });
   dropZone.addEventListener("click", () => fileInput.click());
   document.getElementById("browse-link").addEventListener("click", e => { e.stopPropagation(); fileInput.click(); });
   fileInput.addEventListener("change", () => { addFiles([...fileInput.files]); fileInput.value = ""; });
 
-  // ── Bestanden beheren ──────────────────────────────────────────────────────
   function addFiles(newFiles) {
     newFiles.forEach(f => {
       if (!f.name.toLowerCase().endsWith(".uniec3")) return;
@@ -225,57 +114,26 @@
     files.forEach((f, i) => {
       const li = document.createElement("li");
       li.innerHTML = `<span class="name">${f.name}</span>
-        <button onclick="removeFile(${i})" title="Verwijderen">✕</button>`;
+        <button type="button" onclick="removeFile(${i})">✕</button>`;
       fileList.appendChild(li);
     });
-    mergeBtn.disabled = files.length < 2;
+    nextBtn.disabled = files.length < 2;
     errorBox.style.display = "none";
-    successBox.style.display = "none";
   }
 
-  window.removeFile = function(i) {
-    files.splice(i, 1);
-    renderList();
-  };
+  window.removeFile = function(i) { files.splice(i, 1); renderList(); };
 
-  // ── Samenvoegen ────────────────────────────────────────────────────────────
-  mergeBtn.addEventListener("click", async () => {
-    errorBox.style.display = "none";
-    successBox.style.display = "none";
-    mergeBtn.disabled = true;
-    spinner.style.display = "block";
-    btnLabel.textContent = "Bezig…";
-
-    const rawName = document.getElementById("output-name").value.trim();
-    const today   = new Date().toISOString().slice(0,10);
-    const naam    = (rawName || `projectberekening_${today}`).replace(/\.uniec3$/i, "");
-
-    const form = new FormData();
-    files.forEach(f => form.append("bestanden", f));
-    form.append("bestandsnaam", naam);
-
-    try {
-      const resp = await fetch("/merge", { method: "POST", body: form });
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({ error: "Onbekende fout." }));
-        throw new Error(data.error || resp.statusText);
-      }
-      const blob = await resp.blob();
-      const cd   = resp.headers.get("Content-Disposition") || "";
-      const name = (cd.match(/filename="?([^";\n]+)"?/) || [])[1] || "projectberekening.uniec3";
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement("a");
-      a.href = url; a.download = name; a.click();
-      URL.revokeObjectURL(url);
-      successBox.style.display = "block";
-    } catch (err) {
-      errorBox.textContent = err.message;
-      errorBox.style.display = "block";
-    } finally {
-      mergeBtn.disabled = files.length < 2;
-      spinner.style.display = "none";
-      btnLabel.textContent = "Maak projectberekening";
-    }
+  form.addEventListener("submit", function(e) {
+    e.preventDefault();
+    document.getElementById("form-naam").value = document.getElementById("output-name").value.trim();
+    // Voeg bestanden toe aan form via DataTransfer
+    const dt = new DataTransfer();
+    files.forEach(f => dt.items.add(f));
+    fileInput.files = dt.files;
+    fileInput.name = "bestanden";
+    document.getElementById("spinner").style.display = "block";
+    nextBtn.disabled = true;
+    form.submit();
   });
 </script>
 </body>

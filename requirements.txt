@@ -1,2 +1,4 @@
 flask>=3.0.0
 gunicorn>=21.2.0
+mollie-api-python>=3.0.0
+fpdf2>=2.7.0

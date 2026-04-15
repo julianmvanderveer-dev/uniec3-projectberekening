@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Betalen — {{ config.TOOL_NAAM }}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Segoe UI", Arial, sans-serif; background: #f3f4f6; min-height: 100vh;
+           display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,.10);
+            padding: 40px 44px; width: 100%; max-width: 560px; }
+    h1   { font-size: 1.2rem; font-weight: 700; color: #111; margin-bottom: 20px; }
+    h2   { font-size: .95rem; font-weight: 600; color: #444; margin: 20px 0 10px; }
+    .files { background: #f7f8fa; border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; }
+    .files li { font-size: .875rem; color: #333; padding: 3px 0; list-style: none; }
+    .files li::before { content: "📄 "; }
+    .price-row { display: flex; justify-content: space-between; font-size: .9rem;
+                 padding: 5px 0; color: #555; }
+    .price-row.total { font-weight: 700; color: #111; border-top: 1px solid #e5e7eb;
+                       margin-top: 6px; padding-top: 8px; font-size: 1rem; }
+    .field { margin-bottom: 14px; }
+    .field label { font-size: .85rem; color: #555; display: block; margin-bottom: 4px; }
+    .field label span { color: #e00; }
+    .field input { width: 100%; padding: 9px 12px; border: 1px solid #d1d5db;
+                   border-radius: 6px; font-size: .9rem; color: #333; outline: none; }
+    .field input:focus { border-color: #0078d4; }
+    {% with msgs = get_flashed_messages(with_categories=true) %}{% if msgs %}
+    .flash { background: #fff0f0; border: 1px solid #fbb; border-radius: 6px;
+             padding: 10px 14px; font-size: .85rem; color: #c00; margin-bottom: 16px; }
+    {% endif %}{% endwith %}
+    .btn { width: 100%; padding: 13px; background: #0078d4; color: #fff; border: none;
+           border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer;
+           transition: background .2s; margin-top: 6px; }
+    .btn:hover { background: #005fa3; }
+    .back { display: block; text-align: center; margin-top: 14px; font-size: .85rem;
+            color: #0078d4; text-decoration: none; }
+    .back:hover { text-decoration: underline; }
+    hr { border: none; border-top: 1px solid #e5e7eb; margin: 20px 0; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>Overzicht & betaling</h1>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}<div class="flash">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+
+  <h2>Samen te voegen bestanden</h2>
+  <ul class="files">
+    {% for fn in filenames %}<li>{{ fn }}</li>{% endfor %}
+  </ul>
+  <p style="font-size:.85rem;color:#555;margin-bottom:8px;">
+    Uitvoerbestand: <strong>{{ uitvoernaam }}.uniec3</strong>
+  </p>
+
+  <hr>
+
+  <div class="price-row"><span>Subtotaal (excl. BTW)</span><span>€ {{ "%.2f"|format(excl) }}</span></div>
+  <div class="price-row"><span>BTW 21%</span><span>€ {{ "%.2f"|format(vat) }}</span></div>
+  <div class="price-row total"><span>Totaal</span><span>€ {{ "%.2f"|format(incl) }}</span></div>
+
+  <hr>
+
+  <h2>Gegevens voor factuur</h2>
+  <form method="POST" action="/pay/{{ file_id }}">
+    <div class="field">
+      <label>Naam <span>*</span></label>
+      <input type="text" name="naam" required placeholder="Jan Janssen">
+    </div>
+    <div class="field">
+      <label>Bedrijf</label>
+      <input type="text" name="bedrijf" placeholder="Mijn BV (optioneel)">
+    </div>
+    <div class="field">
+      <label>E-mailadres <span>*</span></label>
+      <input type="email" name="email" required placeholder="jan@voorbeeld.nl">
+    </div>
+    <div class="field">
+      <label>BTW-nummer</label>
+      <input type="text" name="btw_nr" placeholder="NL... (optioneel)">
+    </div>
+    <button type="submit" class="btn">Betalen via iDEAL →</button>
+  </form>
+
+  <a href="/" class="back">← Terug</a>
+</div>
+</body>
+</html>
