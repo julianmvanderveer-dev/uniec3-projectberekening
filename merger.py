@@ -86,14 +86,31 @@ def merge_uniec3(file_objects):
     # ── Entiteiten samenvoegen ────────────────────────────────────────────────
     merged_entities = []
     seen_singletons = set()
+    # LIBCONSTRL: dedupliceer op LIBCONSTRL_BEPALING (zelfde bibliotheekelement
+    # komt in elk kavel voor maar mag maar één keer in het project).
+    seen_libconstrl = set()
 
     for k in kavels:
         for e in k["entities"]:
             eid = e["NTAEntityId"]
+
+            # Singletons: alleen eerste kavel
             if not is_multi(eid):
                 if eid in seen_singletons:
                     continue
                 seen_singletons.add(eid)
+
+            # LIBCONSTRL: dedupliceer op bepaling-code
+            if eid == "LIBCONSTRL":
+                bepaling = next(
+                    (p.get("Value", "") for p in e.get("NTAPropertyDatas", [])
+                     if p.get("NTAPropertyId") == "LIBCONSTRL_BEPALING"),
+                    e.get("NTAEntityDataId", "")
+                )
+                if bepaling in seen_libconstrl:
+                    continue
+                seen_libconstrl.add(bepaling)
+
             entry = dict(e)
             entry["BuildingId"] = new_bid
             if eid == "RZFORM":
