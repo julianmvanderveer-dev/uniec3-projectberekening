@@ -40,30 +40,42 @@ def merge_uniec3(file_objects):
             if isinstance(buildings, dict):
                 buildings = [buildings]
 
-            building = buildings[0]
-            bid = building["BuildingId"]
-            prefix = f"buildings/{bid}/"
+            # Ondersteun verzamelbestanden: itereer over ALLE buildings in het bestand
+            for building in buildings:
+                bid    = building["BuildingId"]
+                prefix = f"buildings/{bid}/"
 
-            def get(suffix):
-                n = next((x for x in names if x.startswith(prefix) and x.endswith(suffix)), None)
-                return read_json_from_zip(zf, n) if n else []
+                def get(suffix, _prefix=prefix):
+                    n = next((x for x in names if x.startswith(_prefix) and x.endswith(suffix)), None)
+                    return read_json_from_zip(zf, n) if n else []
 
-            entities  = get("entities.json")
-            relations = get("relations.json")
-            deltas    = get("deltas.json")
-            summary   = get("summary.json") or {}
+                entities  = get("entities.json")
+                relations = get("relations.json")
+                deltas    = get("deltas.json")
+                summary   = get("summary.json") or {}
 
-            kavels.append({
-                "meta": meta, "folders": folders, "projects": projects,
-                "building": building, "bid": bid,
-                "entities":  entities  if isinstance(entities, list)  else [],
-                "relations": relations if isinstance(relations, list) else [],
-                "deltas":    deltas    if isinstance(deltas, list)    else [],
-                "summary":   summary   if isinstance(summary, dict)   else {},
-            })
+                # Sla RZUNIT_PROJECT buildings over (zijn al een projectberekening)
+                calcunit = next(
+                    (p.get("Value", "") for e in (entities if isinstance(entities, list) else [])
+                     if e.get("NTAEntityId") == "RZFORM"
+                     for p in e.get("NTAPropertyDatas", [])
+                     if p.get("NTAPropertyId") == "RZFORM_CALCUNIT"),
+                    "RZUNIT_GEB"
+                )
+                if calcunit == "RZUNIT_PROJECT":
+                    continue
+
+                kavels.append({
+                    "meta": meta, "folders": folders, "projects": projects,
+                    "building": building, "bid": bid,
+                    "entities":  entities  if isinstance(entities, list)  else [],
+                    "relations": relations if isinstance(relations, list) else [],
+                    "deltas":    deltas    if isinstance(deltas, list)    else [],
+                    "summary":   summary   if isinstance(summary, dict)   else {},
+                })
 
     if not kavels:
-        raise ValueError("Geen geldige bestanden ontvangen.")
+        raise ValueError("Geen RZUNIT_GEB woningberekeningen gevonden in de aangeleverde bestanden.")
 
     # ── Singleton vs. multi ───────────────────────────────────────────────────
     type_counts = [Counter(e["NTAEntityId"] for e in k["entities"]) for k in kavels]

@@ -199,8 +199,8 @@ def upload():
     files = request.files.getlist('bestanden')
     naam  = request.form.get('bestandsnaam', '').strip()
 
-    if len(files) < 2:
-        flash('Voeg minstens 2 bestanden toe.', 'error')
+    if len(files) < 1:
+        flash('Voeg minstens 1 bestand toe.', 'error')
         return redirect(url_for('index'))
     for f in files:
         if not f.filename.lower().endswith('.uniec3'):
