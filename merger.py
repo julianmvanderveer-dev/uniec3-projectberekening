@@ -54,17 +54,6 @@ def merge_uniec3(file_objects):
                 deltas    = get("deltas.json")
                 summary   = get("summary.json") or {}
 
-                # Sla RZUNIT_PROJECT buildings over (zijn al een projectberekening)
-                calcunit = next(
-                    (p.get("Value", "") for e in (entities if isinstance(entities, list) else [])
-                     if e.get("NTAEntityId") == "RZFORM"
-                     for p in e.get("NTAPropertyDatas", [])
-                     if p.get("NTAPropertyId") == "RZFORM_CALCUNIT"),
-                    "RZUNIT_GEB"
-                )
-                if calcunit == "RZUNIT_PROJECT":
-                    continue
-
                 kavels.append({
                     "meta": meta, "folders": folders, "projects": projects,
                     "building": building, "bid": bid,
@@ -75,7 +64,7 @@ def merge_uniec3(file_objects):
                 })
 
     if not kavels:
-        raise ValueError("Geen RZUNIT_GEB woningberekeningen gevonden in de aangeleverde bestanden.")
+        raise ValueError("Geen woningberekeningen gevonden in de aangeleverde bestanden.")
 
     # ── Singleton vs. multi ───────────────────────────────────────────────────
     type_counts = [Counter(e["NTAEntityId"] for e in k["entities"]) for k in kavels]
