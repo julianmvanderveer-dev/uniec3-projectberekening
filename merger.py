@@ -71,17 +71,35 @@ def _content_key(e: dict) -> str:
     return hashlib.md5("|".join(parts).encode()).hexdigest()
 
 
-def _apply_remap(obj, remap: dict):
-    """Vervang recursief alle UUID-strings in obj die voorkomen in remap."""
+def _remap_entity(e: dict, remap: dict) -> dict:
+    """Pas id_remap toe op property-waarden van een entiteit.
+    De eigen NTAEntityDataId wordt NIET aangeraakt — alleen verwijzingen
+    in NTAPropertyDatas.Value naar andere entiteiten worden bijgewerkt."""
     if not remap:
-        return obj
-    if isinstance(obj, dict):
-        return {k: _apply_remap(v, remap) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_apply_remap(item, remap) for item in obj]
-    if isinstance(obj, str) and obj in remap:
-        return remap[obj]
-    return obj
+        return e
+    new_props = []
+    for p in e.get("NTAPropertyDatas", []):
+        val = p.get("Value", "")
+        if isinstance(val, str) and val in remap:
+            p = dict(p)
+            p["Value"] = remap[val]
+        new_props.append(p)
+    return dict(e, NTAPropertyDatas=new_props)
+
+
+def _remap_relation(r: dict, remap: dict) -> dict:
+    """Pas id_remap toe op ParentId en ChildId van een relatie."""
+    if not remap:
+        return r
+    r = dict(r)
+    if r.get("ParentId") in remap:
+        r["ParentId"] = remap[r["ParentId"]]
+    if r.get("ChildId") in remap:
+        r["ChildId"] = remap[r["ChildId"]]
+    # Composite sleutel bijwerken
+    if "NTAEntityRelationDataId" in r:
+        r["NTAEntityRelationDataId"] = f"{r['ParentId']}:{r['ChildId']}"
+    return r
 
 
 # ── ZIP-helpers ────────────────────────────────────────────────────────────────
@@ -240,7 +258,12 @@ def merge_uniec3(file_objects):
             other_entities.append(entry)
 
     # ── Stap 4: ID-remap toepassen op alle entiteiten ─────────────────────────
-    merged_entities = deduped_lib + [_apply_remap(e, id_remap) for e in other_entities]
+    # Remap wordt ook op deduped_lib toegepast zodat cross-referenties
+    # tussen bibliotheek/installatie-typen onderling correct worden bijgewerkt.
+    merged_entities = (
+        [_remap_entity(e, id_remap) for e in deduped_lib] +
+        [_remap_entity(e, id_remap) for e in other_entities]
+    )
 
     # Set van geldige entity-IDs in het eindresultaat (voor relatie-filtering)
     valid_entity_ids = {
@@ -250,15 +273,13 @@ def merge_uniec3(file_objects):
     }
 
     # ── Stap 5: Relaties samenvoegen + remap + dedup + filteren ──────────────
-    # Gebruik NTAEntityRelationDataId (ParentId:ChildId) als dedup-sleutel.
-    # Filter relaties waarvan Parent of Child niet meer bestaat (o.a. RESULT-*).
     seen_relation_ids = set()
     merged_relations  = []
     for k in kavels:
         for r in k["relations"]:
-            r2 = _apply_remap(dict(r, BuildingId=new_bid), id_remap)
+            r2 = _remap_relation(dict(r, BuildingId=new_bid), id_remap)
 
-            # Dedup op composite relatie-ID
+            # Dedup op composite relatie-ID (na remap)
             rid = r2.get("NTAEntityRelationDataId") or ""
             if rid:
                 if rid in seen_relation_ids:
@@ -279,7 +300,7 @@ def merge_uniec3(file_objects):
     merged_deltas  = []
     for k in kavels:
         for d in k["deltas"]:
-            d2  = _apply_remap(dict(d, BuildingId=new_bid), id_remap)
+            d2  = _remap_entity(dict(d, BuildingId=new_bid), id_remap)
             did = d2.get("NTADeltaId") or d2.get("Id") or d2.get("id") or ""
             if did:
                 if did in seen_delta_ids:
