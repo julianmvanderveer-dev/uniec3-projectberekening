@@ -86,40 +86,48 @@ def merge_uniec3(file_objects):
 
     # ── Entiteiten samenvoegen ────────────────────────────────────────────────
     merged_entities = []
-    seen_singletons = set()
-
-    # Deduplicatie-sets voor entiteiten die meerdere keren voorkomen per kavel
-    # maar inhoudelijk identiek zijn over kavels heen.
-    seen_libconstrl  = set()   # key: LIBCONSTRL_BEPALING
-    seen_installatie = set()   # key: INSTALL_NAAM
+    seen_entity_ids  = set()   # globale dedup op NTAEntityDataId
+    seen_singletons  = set()   # dedup op entity-type voor singletons
+    seen_libconstrl  = set()   # key: LIBCONSTRL_BEPALING (inhoudelijke dedup)
+    seen_installatie = set()   # key: INSTALL_NAAM (inhoudelijke dedup)
 
     for k in kavels:
         for e in k["entities"]:
             eid = e["NTAEntityId"]
 
-            # Singletons: alleen eerste kavel
+            # ── 1. Globale ID-deduplicatie ────────────────────────────────────
+            # Entiteiten met dezelfde NTAEntityDataId zijn identiek over
+            # buildings heen (gedeelde bibliotheek, gedeelde installaties).
+            entity_data_id = e.get("NTAEntityDataId", "")
+            if entity_data_id:
+                if entity_data_id in seen_entity_ids:
+                    continue
+                seen_entity_ids.add(entity_data_id)
+
+            # ── 2. Singletons: alleen eerste kavel ────────────────────────────
             if not is_multi(eid):
                 if eid in seen_singletons:
                     continue
                 seen_singletons.add(eid)
 
-            # LIBCONSTRL: dedupliceer op bepaling-code
+            # ── 3. LIBCONSTRL: extra inhoudelijke dedup op bepaling-code ──────
+            # (vangt gevallen op waarbij ID's wél verschillen maar inhoud gelijk)
             if eid == "LIBCONSTRL":
                 bepaling = next(
                     (p.get("Value", "") for p in e.get("NTAPropertyDatas", [])
                      if p.get("NTAPropertyId") == "LIBCONSTRL_BEPALING"),
-                    e.get("NTAEntityDataId", "")
+                    entity_data_id
                 )
                 if bepaling in seen_libconstrl:
                     continue
                 seen_libconstrl.add(bepaling)
 
-            # INSTALLATIE: dedupliceer op installatienaam
+            # ── 4. INSTALLATIE: extra inhoudelijke dedup op naam ──────────────
             if eid == "INSTALLATIE":
                 naam = next(
                     (p.get("Value", "") for p in e.get("NTAPropertyDatas", [])
                      if p.get("NTAPropertyId") == "INSTALL_NAAM"),
-                    e.get("NTAEntityDataId", "")
+                    entity_data_id
                 )
                 if naam in seen_installatie:
                     continue
@@ -133,9 +141,28 @@ def merge_uniec3(file_objects):
                         p["Value"] = "RZUNIT_PROJECT"
             merged_entities.append(entry)
 
-    # ── Relaties & deltas samenvoegen ─────────────────────────────────────────
-    merged_relations = [dict(r, BuildingId=new_bid) for k in kavels for r in k["relations"]]
-    merged_deltas    = [dict(d, BuildingId=new_bid) for k in kavels for d in k["deltas"]]
+    # ── Relaties & deltas samenvoegen (dedup op relatie-ID) ──────────────────
+    seen_relation_ids = set()
+    merged_relations  = []
+    for k in kavels:
+        for r in k["relations"]:
+            rid = r.get("NTARelationId") or r.get("Id") or r.get("id") or ""
+            if rid and rid in seen_relation_ids:
+                continue
+            if rid:
+                seen_relation_ids.add(rid)
+            merged_relations.append(dict(r, BuildingId=new_bid))
+
+    seen_delta_ids = set()
+    merged_deltas  = []
+    for k in kavels:
+        for d in k["deltas"]:
+            did = d.get("NTADeltaId") or d.get("Id") or d.get("id") or ""
+            if did and did in seen_delta_ids:
+                continue
+            if did:
+                seen_delta_ids.add(did)
+            merged_deltas.append(dict(d, BuildingId=new_bid))
 
     summary = dict(first["summary"])
     summary["BuildingId"] = new_bid
