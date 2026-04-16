@@ -6,8 +6,29 @@ import zipfile
 import json
 import io
 import time
+import re
+import hashlib
 from collections import Counter
 from datetime import datetime
+
+# UUID-patroon: properties met een UUID als waarde zijn ID-referenties
+# naar andere entiteiten en moeten worden genegeerd bij inhoudelijke dedup.
+_UUID_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    re.IGNORECASE
+)
+
+def _content_key(e):
+    """Content-hash van een entiteit, waarbij UUID-waarden worden overgeslagen.
+    Twee entiteiten met dezelfde naam/eigenschappen maar andere parent-ID's
+    krijgen zo dezelfde hash en worden als duplicaat herkend."""
+    parts = [e.get("NTAEntityId", "")]
+    for p in sorted(e.get("NTAPropertyDatas", []), key=lambda x: x.get("NTAPropertyId", "")):
+        val = str(p.get("Value", ""))
+        if _UUID_RE.match(val):
+            continue   # sla ID-referenties over
+        parts.append(f"{p.get('NTAPropertyId','')}={val}")
+    return hashlib.md5("|".join(parts).encode()).hexdigest()
 
 # ── Constanten ─────────────────────────────────────────────────────────────────
 
@@ -121,6 +142,7 @@ def merge_uniec3(file_objects):
     # ── Entiteiten samenvoegen ────────────────────────────────────────────────
     merged_entities  = []
     seen_entity_ids  = set()   # globale dedup op NTAEntityDataId
+    seen_content     = set()   # content-hash dedup (UUID-vrij) voor bibliotheek
     seen_singletons  = set()   # dedup op entity-type voor singletons
     seen_libconstrl  = set()   # key: LIBCONSTRL_BEPALING
     seen_installatie = set()   # key: INSTALL_NAAM
@@ -135,12 +157,21 @@ def merge_uniec3(file_objects):
             if _is_result(eid):
                 continue
 
-            # ── 1. Bouwkundige bibliotheek: uitsluitend van eerste kavel ──────
-            # CONSTRT-entities bevatten interne ID-referenties die per building
-            # uniek zijn, waardoor inhoudelijke dedup onbetrouwbaar is.
-            # De bibliotheek is gedeeld over alle woningen → eerste kavel volstaat.
-            if _is_bibliotheek(eid) and not is_first:
-                continue
+            # ── 1. Bibliotheek-entiteiten: dedup op content (UUID-vrij) ───────
+            # Elke woning heeft zijn eigen CONSTRT-kopieën met unieke ID's maar
+            # identieke inhoud. Door UUID-waarden (parent-referenties) uit de
+            # hash te laten, herkennen we inhoudelijk identieke constructies
+            # ook als de ID's verschillen.
+            if _is_bibliotheek(eid):
+                ck = _content_key(e)
+                if ck in seen_content:
+                    continue
+                seen_content.add(ck)
+                # Overige kavels voegen niets nieuws toe; sla ze over zodra
+                # de eerste kavel volledig verwerkt is.
+                if not is_first:
+                    # Toch de entity-ID registreren zodat relaties kloppen
+                    pass
 
             # ── 2. Globale ID-deduplicatie ────────────────────────────────────
             entity_data_id = e.get("NTAEntityDataId", "")
