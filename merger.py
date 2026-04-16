@@ -6,8 +6,25 @@ import zipfile
 import json
 import io
 import time
+import hashlib
 from collections import Counter
 from datetime import datetime
+
+# Entiteitstypen die uitsluitend berekeningsresultaten bevatten en
+# NIET in een invoerbestand horen (Uniec3 herberekent ze zelf).
+RESULT_TYPES = {
+    "RESULT-ENERGIEFUNCTIE", "RESULT-ENERGIEGEBRUIK",
+    "RESULT-PV", "PRESTATIE",
+}
+
+def _content_key(e):
+    """Hash op basis van entity-type + alle property-waarden (gesorteerd).
+    Gebruikt voor deduplicatie van entiteiten waarbij de ID per building
+    verschilt maar de inhoud gelijk is (bijv. gedeelde bibliotheek)."""
+    parts = [e.get("NTAEntityId", "")]
+    for p in sorted(e.get("NTAPropertyDatas", []), key=lambda x: x.get("NTAPropertyId", "")):
+        parts.append(f"{p.get('NTAPropertyId','')}={p.get('Value','')}")
+    return hashlib.md5("|".join(parts).encode()).hexdigest()
 
 
 def read_json_from_zip(zf, name):
@@ -85,33 +102,47 @@ def merge_uniec3(file_objects):
     proj_building["ChangeDate"] = now_iso
 
     # ── Entiteiten samenvoegen ────────────────────────────────────────────────
-    merged_entities = []
+    merged_entities  = []
     seen_entity_ids  = set()   # globale dedup op NTAEntityDataId
     seen_singletons  = set()   # dedup op entity-type voor singletons
-    seen_libconstrl  = set()   # key: LIBCONSTRL_BEPALING (inhoudelijke dedup)
-    seen_installatie = set()   # key: INSTALL_NAAM (inhoudelijke dedup)
+    seen_libconstrl  = set()   # key: LIBCONSTRL_BEPALING
+    seen_installatie = set()   # key: INSTALL_NAAM
+    seen_content     = set()   # content-hash dedup voor bibliotheek-entries
+
+    # Entiteitstypen die op content-hash worden gededupliceerd (bibliotheek).
+    # Meerdere buildings delen dezelfde constructies maar geven elk een
+    # unieke NTAEntityDataId → content-hash is de enige betrouwbare sleutel.
+    CONTENT_DEDUP_TYPES = {"LIBCONSTRL", "CONSTRT"}
 
     for k in kavels:
         for e in k["entities"]:
             eid = e["NTAEntityId"]
 
+            # ── 0. Sla berekeningsresultaten altijd over ──────────────────────
+            if eid in RESULT_TYPES or eid.startswith("RESULT-"):
+                continue
+
             # ── 1. Globale ID-deduplicatie ────────────────────────────────────
-            # Entiteiten met dezelfde NTAEntityDataId zijn identiek over
-            # buildings heen (gedeelde bibliotheek, gedeelde installaties).
             entity_data_id = e.get("NTAEntityDataId", "")
             if entity_data_id:
                 if entity_data_id in seen_entity_ids:
                     continue
                 seen_entity_ids.add(entity_data_id)
 
-            # ── 2. Singletons: alleen eerste kavel ────────────────────────────
+            # ── 2. Content-hash dedup voor bibliotheek-entiteiten ─────────────
+            if eid in CONTENT_DEDUP_TYPES:
+                ck = _content_key(e)
+                if ck in seen_content:
+                    continue
+                seen_content.add(ck)
+
+            # ── 3. Singletons: alleen eerste kavel ────────────────────────────
             if not is_multi(eid):
                 if eid in seen_singletons:
                     continue
                 seen_singletons.add(eid)
 
-            # ── 3. LIBCONSTRL: extra inhoudelijke dedup op bepaling-code ──────
-            # (vangt gevallen op waarbij ID's wél verschillen maar inhoud gelijk)
+            # ── 4. LIBCONSTRL: extra dedup op bepaling-code ───────────────────
             if eid == "LIBCONSTRL":
                 bepaling = next(
                     (p.get("Value", "") for p in e.get("NTAPropertyDatas", [])
@@ -122,7 +153,7 @@ def merge_uniec3(file_objects):
                     continue
                 seen_libconstrl.add(bepaling)
 
-            # ── 4. INSTALLATIE: extra inhoudelijke dedup op naam ──────────────
+            # ── 5. INSTALLATIE: extra dedup op naam ───────────────────────────
             if eid == "INSTALLATIE":
                 naam = next(
                     (p.get("Value", "") for p in e.get("NTAPropertyDatas", [])
