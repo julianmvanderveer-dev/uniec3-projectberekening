@@ -41,11 +41,23 @@ LIB_PREFIXES = (
     "KOEL",   # KOEL, KOEL-AFG, KOEL-DISTR, KOEL-OPWEK, …
 )
 
-# Root-installaties: altijd singleton (eerste woning wint).
+# Installatie-entiteiten die altijd singleton zijn (eerste woning wint).
 # Content-hash dedup werkt niet als twee bronbestanden licht afwijkende
-# instellingen hebben (bijv. VERW_OPEN verschilt) — dan blijft een dubbele
-# VERW/TAPW/KOEL over die geen INSTALLATIE-parent meer heeft → importfout.
-INSTALL_SINGLETONS = {"TAPW", "VERW", "KOEL"}
+# instellingen hebben — dan blijven dubbele systeem-entiteiten over die
+# Uniec3 niet aankan (importfout).
+# Per-woning entiteiten (*-OPWEK, *-BIN, *-UNIT) blijven content-hash dedup.
+INSTALL_SINGLETONS = {
+    # Root-niveau
+    "TAPW", "VERW", "KOEL",
+    # Systeem-niveau VERW (1 per installatie)
+    "VERW-AFG", "VERW-AFG-VENT",
+    "VERW-DISTR", "VERW-DISTR-BUI", "VERW-DISTR-EIG", "VERW-DISTR-POMP",
+    # Systeem-niveau KOEL (1 per installatie)
+    "KOEL-AFG", "KOEL-AFG-VENT",
+    "KOEL-DISTR", "KOEL-DISTR-BUI", "KOEL-DISTR-EIG", "KOEL-DISTR-POMP",
+    # Systeem-niveau TAPW (1 per installatie)
+    "TAPW-AFG", "TAPW-DISTR", "TAPW-VAT",
+}
 
 # Per-woning-entiteiten: altijd multi (van alle kavels).
 MULTI_EXACT    = {"RZ"}
