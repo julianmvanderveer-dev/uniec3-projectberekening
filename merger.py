@@ -98,9 +98,11 @@ def merge_uniec3(file_objects):
     # ── Entiteiten samenvoegen ────────────────────────────────────────────────
     merged_entities = []
     seen_singletons = set()
-    # LIBCONSTRL: dedupliceer op LIBCONSTRL_BEPALING (zelfde bibliotheekelement
-    # komt in elk kavel voor maar mag maar één keer in het project).
-    seen_libconstrl = set()
+
+    # Deduplicatie-sets voor entiteiten die meerdere keren voorkomen per kavel
+    # maar inhoudelijk identiek zijn over kavels heen.
+    seen_libconstrl  = set()   # key: LIBCONSTRL_BEPALING
+    seen_installatie = set()   # key: INSTALL_NAAM
 
     for k in kavels:
         for e in k["entities"]:
@@ -122,6 +124,17 @@ def merge_uniec3(file_objects):
                 if bepaling in seen_libconstrl:
                     continue
                 seen_libconstrl.add(bepaling)
+
+            # INSTALLATIE: dedupliceer op installatienaam
+            if eid == "INSTALLATIE":
+                naam = next(
+                    (p.get("Value", "") for p in e.get("NTAPropertyDatas", [])
+                     if p.get("NTAPropertyId") == "INSTALL_NAAM"),
+                    e.get("NTAEntityDataId", "")
+                )
+                if naam in seen_installatie:
+                    continue
+                seen_installatie.add(naam)
 
             entry = dict(e)
             entry["BuildingId"] = new_bid
