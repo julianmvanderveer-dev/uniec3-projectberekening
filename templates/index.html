@@ -25,15 +25,12 @@
     #file-list li:nth-child(odd) { background: #f7f8fa; }
     #file-list li .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #file-list li button { background: none; border: none; cursor: pointer; color: #aaa;
-                           font-size: 1rem; line-height: 1; padding: 0 4px; flex-shrink: 0; }
+                           font-size: 1rem; padding: 0 4px; flex-shrink: 0; }
     #file-list li button:hover { color: #e00; }
     .field { margin-bottom: 16px; }
     .field label { font-size: .85rem; color: #555; display: block; margin-bottom: 5px; }
     .field input { width: 100%; padding: 9px 12px; border: 1px solid #d1d5db;
                    border-radius: 6px; font-size: .9rem; color: #333; outline: none; }
-    .price-box { background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px;
-                 padding: 12px 16px; font-size: .875rem; color: #166534; margin-bottom: 18px; }
-    .price-box strong { font-size: 1rem; }
     #error-box { display: none; background: #fff0f0; border: 1px solid #fbb; border-radius: 6px;
                  padding: 10px 14px; font-size: .85rem; color: #c00; margin-bottom: 16px; }
     .btn { width: 100%; padding: 13px; background: #0078d4; color: #fff; border: none;
@@ -44,13 +41,15 @@
     .spinner { display: none; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.4);
                border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    #success-box { display: none; background: #f0fff4; border: 1px solid #6ee7a0; border-radius: 6px;
+                   padding: 10px 14px; font-size: .875rem; color: #166534; margin-top: 14px; text-align: center; }
     input[type="file"] { display: none; }
   </style>
 </head>
 <body>
 <div class="card">
   <h1>{{ config.TOOL_NAAM }}</h1>
-  <p class="sub">Sleep losse .uniec3 woningbestanden hieronder om ze samen te voegen tot één projectberekening.</p>
+  <p class="sub">Sleep .uniec3 bestanden hieronder — losse woningberekeningen of één verzamelbestand. De tool voegt ze samen tot één projectberekening.</p>
 
   <div class="drop-zone" id="drop-zone">
     <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -67,30 +66,25 @@
     <input type="text" id="output-name" placeholder="projectberekening_2026-04-16">
   </div>
 
-  <div class="price-box">
-    Prijs: <strong>€ {{ "%.2f"|format(config.PRICE_PER_MERGE) }} excl. BTW</strong>
-    (€ {{ "%.2f"|format(config.PRICE_PER_MERGE * (1 + config.VAT_RATE)) }} incl.) per samenvoeging.
-    Betaling via iDEAL — daarna directe download + factuur.
-  </div>
-
   <div id="error-box"></div>
 
-  <form id="upload-form" method="POST" action="/upload" enctype="multipart/form-data">
-    <input type="hidden" name="bestandsnaam" id="form-naam">
-    <button type="submit" class="btn" id="next-btn" disabled>
-      <span class="spinner" id="spinner"></span>
-      <span>Verder naar betaling →</span>
-    </button>
-  </form>
+  <button class="btn" id="merge-btn" disabled>
+    <span class="spinner" id="spinner"></span>
+    <span id="btn-label">Maak projectberekening</span>
+  </button>
+
+  <div id="success-box">✓ Projectberekening aangemaakt — download gestart.</div>
 </div>
 
 <script>
-  const dropZone = document.getElementById("drop-zone");
+  const dropZone  = document.getElementById("drop-zone");
   const fileInput = document.getElementById("file-input");
   const fileList  = document.getElementById("file-list");
-  const nextBtn   = document.getElementById("next-btn");
+  const mergeBtn  = document.getElementById("merge-btn");
+  const spinner   = document.getElementById("spinner");
+  const btnLabel  = document.getElementById("btn-label");
   const errorBox  = document.getElementById("error-box");
-  const form      = document.getElementById("upload-form");
+  const successBox= document.getElementById("success-box");
   let files = [];
 
   dropZone.addEventListener("dragover",  e => { e.preventDefault(); dropZone.classList.add("drag-over"); });
@@ -117,23 +111,48 @@
         <button type="button" onclick="removeFile(${i})">✕</button>`;
       fileList.appendChild(li);
     });
-    nextBtn.disabled = files.length < 1;
+    mergeBtn.disabled = files.length < 1;
     errorBox.style.display = "none";
+    successBox.style.display = "none";
   }
 
   window.removeFile = function(i) { files.splice(i, 1); renderList(); };
 
-  form.addEventListener("submit", function(e) {
-    e.preventDefault();
-    document.getElementById("form-naam").value = document.getElementById("output-name").value.trim();
-    // Voeg bestanden toe aan form via DataTransfer
-    const dt = new DataTransfer();
-    files.forEach(f => dt.items.add(f));
-    fileInput.files = dt.files;
-    fileInput.name = "bestanden";
-    document.getElementById("spinner").style.display = "block";
-    nextBtn.disabled = true;
-    form.submit();
+  mergeBtn.addEventListener("click", async () => {
+    errorBox.style.display = "none";
+    successBox.style.display = "none";
+    mergeBtn.disabled = true;
+    spinner.style.display = "block";
+    btnLabel.textContent = "Bezig…";
+
+    const today = new Date().toISOString().slice(0,10);
+    const naam  = (document.getElementById("output-name").value.trim() || `projectberekening_${today}`).replace(/\.uniec3$/i,"");
+
+    const form = new FormData();
+    files.forEach(f => form.append("bestanden", f));
+    form.append("bestandsnaam", naam);
+
+    try {
+      const resp = await fetch("/merge", { method: "POST", body: form });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({ error: "Onbekende fout." }));
+        throw new Error(data.error || resp.statusText);
+      }
+      const blob = await resp.blob();
+      const cd   = resp.headers.get("Content-Disposition") || "";
+      const name = (cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/) || [])[1]?.replace(/['"]/g,"") || `${naam}.uniec3`;
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a"); a.href = url; a.download = name; a.click();
+      URL.revokeObjectURL(url);
+      successBox.style.display = "block";
+    } catch (err) {
+      errorBox.textContent = err.message;
+      errorBox.style.display = "block";
+    } finally {
+      mergeBtn.disabled = files.length < 1;
+      spinner.style.display = "none";
+      btnLabel.textContent = "Maak projectberekening";
+    }
   });
 </script>
 </body>
