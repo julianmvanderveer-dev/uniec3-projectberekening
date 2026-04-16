@@ -1,5 +1,13 @@
 """
 Uniec3 merge-logica: voegt losse woningberekeningen samen tot één projectberekening.
+
+Deduplicatiestrategie:
+- LIB*-entiteiten (bouwkundige bibliotheek): gededupliceerd op inhoud (UUID-vrij),
+  met ID-remapping zodat alle verwijzingen naar duplicaten naar het
+  behouden exemplaar wijzen.
+- RESULT-* / PRESTATIE: uitgesloten (herberekend door Uniec3 zelf).
+- UNIT / RZ / *: per-woning-entiteiten, meegenomen van alle kavels.
+- Overige singletons (RZFORM etc.): uitsluitend van het eerste kavel.
 """
 
 import zipfile
@@ -11,60 +19,65 @@ import hashlib
 from collections import Counter
 from datetime import datetime
 
-# UUID-patroon: properties met een UUID als waarde zijn ID-referenties
-# naar andere entiteiten en moeten worden genegeerd bij inhoudelijke dedup.
+# ── UUID-patroon ───────────────────────────────────────────────────────────────
 _UUID_RE = re.compile(
     r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-    re.IGNORECASE
+    re.IGNORECASE,
 )
 
-def _content_key(e):
-    """Content-hash van een entiteit, waarbij UUID-waarden worden overgeslagen.
-    Twee entiteiten met dezelfde naam/eigenschappen maar andere parent-ID's
-    krijgen zo dezelfde hash en worden als duplicaat herkend."""
+# ── Categorieën ────────────────────────────────────────────────────────────────
+
+# Berekeningsresultaten: niet overnemen (Uniec3 herberekent ze).
+RESULT_EXACT    = {"PRESTATIE"}
+RESULT_PREFIXES = ("RESULT-",)
+
+# Bouwkundige bibliotheek: dedup op inhoud + ID-remapping.
+LIB_PREFIXES = ("LIB",)   # LIBCONSTRD, LIBCONSTRT, LIBCONSTRL, LIBCONSTRFORM, …
+
+# Per-woning-entiteiten: altijd multi (van alle kavels).
+MULTI_EXACT    = {"RZ"}
+MULTI_PREFIXES = ("UNIT",)
+
+
+def _is_result(eid: str) -> bool:
+    return eid in RESULT_EXACT or any(eid.startswith(p) for p in RESULT_PREFIXES)
+
+
+def _is_lib(eid: str) -> bool:
+    return any(eid.startswith(p) for p in LIB_PREFIXES)
+
+
+def _is_forced_multi(eid: str) -> bool:
+    return eid in MULTI_EXACT or any(eid.startswith(p) for p in MULTI_PREFIXES)
+
+
+def _content_key(e: dict) -> str:
+    """Hash van entity-inhoud zonder UUID-waarden.
+    Twee entiteiten met identieke eigenschappen maar andere ID's
+    (bijv. gekopieerde bibliotheek per woning) krijgen dezelfde hash."""
     parts = [e.get("NTAEntityId", "")]
     for p in sorted(e.get("NTAPropertyDatas", []), key=lambda x: x.get("NTAPropertyId", "")):
         val = str(p.get("Value", ""))
         if _UUID_RE.match(val):
             continue   # sla ID-referenties over
-        parts.append(f"{p.get('NTAPropertyId','')}={val}")
+        parts.append(f"{p.get('NTAPropertyId', '')}={val}")
     return hashlib.md5("|".join(parts).encode()).hexdigest()
 
-# ── Constanten ─────────────────────────────────────────────────────────────────
 
-# Entiteitstypen die berekeningsresultaten zijn. Uniec3 herberekent deze
-# zelf na import; ze horen niet in een invoerbestand.
-RESULT_PREFIXES = ("RESULT-",)
-RESULT_EXACT    = {"PRESTATIE"}
-
-# Entiteitstypen die de gedeelde bouwkundige bibliotheek vormen.
-# Elke woning heeft zijn eigen kopie met unieke ID's, maar de inhoud is
-# identiek. We nemen deze uitsluitend van het EERSTE kavel/building.
-BIBLIOTHEEK_EXACT    = {"LIBCONSTRL"}
-BIBLIOTHEEK_PREFIXES = ("CONSTRT",)   # CONSTRT, CONSTRT_LAAG, enz.
-
-# Entiteitstypen die per woning uniek zijn (altijd multi).
-FORCED_MULTI_EXACT    = {"RZ"}
-FORCED_MULTI_PREFIXES = ("UNIT",)
+def _apply_remap(obj, remap: dict):
+    """Vervang recursief alle UUID-strings in obj die voorkomen in remap."""
+    if not remap:
+        return obj
+    if isinstance(obj, dict):
+        return {k: _apply_remap(v, remap) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_apply_remap(item, remap) for item in obj]
+    if isinstance(obj, str) and obj in remap:
+        return remap[obj]
+    return obj
 
 
-def _is_result(eid):
-    if eid in RESULT_EXACT:
-        return True
-    return any(eid.startswith(p) for p in RESULT_PREFIXES)
-
-
-def _is_bibliotheek(eid):
-    if eid in BIBLIOTHEEK_EXACT:
-        return True
-    return any(eid.startswith(p) for p in BIBLIOTHEEK_PREFIXES)
-
-
-def _is_forced_multi(eid):
-    if eid in FORCED_MULTI_EXACT:
-        return True
-    return any(eid.startswith(p) for p in FORCED_MULTI_PREFIXES)
-
+# ── ZIP-helpers ────────────────────────────────────────────────────────────────
 
 def read_json_from_zip(zf, name):
     with zf.open(name) as f:
@@ -76,19 +89,18 @@ def encode_json(obj):
     return ("\ufeff" + json.dumps(obj, ensure_ascii=False, separators=(",", ":"))).encode("utf-8")
 
 
+# ── Merge ──────────────────────────────────────────────────────────────────────
+
 def merge_uniec3(file_objects):
     """
-    Voegt meerdere .uniec3 bestanden (file-achtige objecten) samen
-    tot één projectberekening.
-
+    Voegt meerdere .uniec3 bestanden samen tot één projectberekening.
     Geeft terug: (bytes van .uniec3, aantal woningen)
     """
     kavels = []
 
     for fo in file_objects:
         with zipfile.ZipFile(fo, "r") as zf:
-            names = zf.namelist()
-
+            names     = zf.namelist()
             meta      = read_json_from_zip(zf, "meta.json")
             folders   = read_json_from_zip(zf, "folders.json")
             projects  = read_json_from_zip(zf, "projects.json")
@@ -96,13 +108,12 @@ def merge_uniec3(file_objects):
             if isinstance(buildings, dict):
                 buildings = [buildings]
 
-            # Verzamelbestanden: itereer over ALLE buildings per bestand
             for building in buildings:
                 bid    = building["BuildingId"]
                 prefix = f"buildings/{bid}/"
 
-                def get(suffix, _prefix=prefix):
-                    n = next((x for x in names if x.startswith(_prefix) and x.endswith(suffix)), None)
+                def get(suffix, _p=prefix):
+                    n = next((x for x in names if x.startswith(_p) and x.endswith(suffix)), None)
                     return read_json_from_zip(zf, n) if n else []
 
                 entities  = get("entities.json")
@@ -122,14 +133,6 @@ def merge_uniec3(file_objects):
     if not kavels:
         raise ValueError("Geen woningberekeningen gevonden in de aangeleverde bestanden.")
 
-    # ── Singleton vs. multi (voor overige typen) ──────────────────────────────
-    type_counts = [Counter(e["NTAEntityId"] for e in k["entities"]) for k in kavels]
-
-    def is_multi(eid):
-        if _is_forced_multi(eid):
-            return True
-        return any(c.get(eid, 0) > 1 for c in type_counts)
-
     # ── Nieuw project-BuildingId ──────────────────────────────────────────────
     new_bid  = int(time.time())
     first    = kavels[0]
@@ -139,70 +142,80 @@ def merge_uniec3(file_objects):
     proj_building["BuildingId"] = new_bid
     proj_building["ChangeDate"] = now_iso
 
-    # ── Entiteiten samenvoegen ────────────────────────────────────────────────
-    merged_entities  = []
-    seen_entity_ids  = set()   # globale dedup op NTAEntityDataId
-    seen_content     = set()   # content-hash dedup (UUID-vrij) voor bibliotheek
-    seen_singletons  = set()   # dedup op entity-type voor singletons
-    seen_libconstrl  = set()   # key: LIBCONSTRL_BEPALING
-    seen_installatie = set()   # key: INSTALL_NAAM
+    # ── Stap 1: Bibliotheek dedupliceren + ID-remap opbouwen ─────────────────
+    # Voor elk LIB*-type: bij dubbele inhoud → canonical ID bewaren,
+    # duplicaat-ID opnemen in id_remap zodat verwijzingen daarnaar worden
+    # bijgewerkt naar het canonical exemplaar.
+    lib_content_seen: dict[str, str] = {}   # content_hash → canonical NTAEntityDataId
+    id_remap:         dict[str, str] = {}   # duplicate_id → canonical_id
+    deduped_lib:      list           = []   # unieke LIB*-entiteiten
+
+    for k in kavels:
+        for e in k["entities"]:
+            eid = e.get("NTAEntityId", "")
+            if not _is_lib(eid):
+                continue
+            if _is_result(eid):
+                continue
+            ck     = _content_key(e)
+            old_id = e.get("NTAEntityDataId", "")
+            if ck in lib_content_seen:
+                canonical_id = lib_content_seen[ck]
+                if old_id and old_id != canonical_id:
+                    id_remap[old_id] = canonical_id
+            else:
+                lib_content_seen[ck] = old_id
+                entry = dict(e)
+                entry["BuildingId"] = new_bid
+                deduped_lib.append(entry)
+
+    # ── Stap 2: Singleton vs. multi bepalen (excl. LIB*) ─────────────────────
+    type_counts = [Counter(e["NTAEntityId"] for e in k["entities"]) for k in kavels]
+
+    def is_multi(eid: str) -> bool:
+        if _is_forced_multi(eid):
+            return True
+        return any(c.get(eid, 0) > 1 for c in type_counts)
+
+    # ── Stap 3: Overige entiteiten samenvoegen ────────────────────────────────
+    other_entities   = []
+    seen_entity_ids  = set()
+    seen_singletons  = set()
+    seen_installatie = set()
 
     for kavel_idx, k in enumerate(kavels):
         is_first = (kavel_idx == 0)
 
         for e in k["entities"]:
-            eid = e["NTAEntityId"]
+            eid = e.get("NTAEntityId", "")
 
-            # ── 0. Berekeningsresultaten: altijd overslaan ────────────────────
+            # LIB* al verwerkt in stap 1
+            if _is_lib(eid):
+                continue
+
+            # Berekeningsresultaten overslaan
             if _is_result(eid):
                 continue
 
-            # ── 1. Bibliotheek-entiteiten: dedup op content (UUID-vrij) ───────
-            # Elke woning heeft zijn eigen CONSTRT-kopieën met unieke ID's maar
-            # identieke inhoud. Door UUID-waarden (parent-referenties) uit de
-            # hash te laten, herkennen we inhoudelijk identieke constructies
-            # ook als de ID's verschillen.
-            if _is_bibliotheek(eid):
-                ck = _content_key(e)
-                if ck in seen_content:
+            # Globale ID-dedup
+            entity_id = e.get("NTAEntityDataId", "")
+            if entity_id:
+                if entity_id in seen_entity_ids:
                     continue
-                seen_content.add(ck)
-                # Overige kavels voegen niets nieuws toe; sla ze over zodra
-                # de eerste kavel volledig verwerkt is.
-                if not is_first:
-                    # Toch de entity-ID registreren zodat relaties kloppen
-                    pass
+                seen_entity_ids.add(entity_id)
 
-            # ── 2. Globale ID-deduplicatie ────────────────────────────────────
-            entity_data_id = e.get("NTAEntityDataId", "")
-            if entity_data_id:
-                if entity_data_id in seen_entity_ids:
-                    continue
-                seen_entity_ids.add(entity_data_id)
-
-            # ── 3. Singletons: alleen eerste kavel ────────────────────────────
+            # Singletons: alleen eerste kavel
             if not is_multi(eid):
                 if eid in seen_singletons:
                     continue
                 seen_singletons.add(eid)
 
-            # ── 4. LIBCONSTRL: extra dedup op bepaling-code ───────────────────
-            if eid == "LIBCONSTRL":
-                bepaling = next(
-                    (p.get("Value", "") for p in e.get("NTAPropertyDatas", [])
-                     if p.get("NTAPropertyId") == "LIBCONSTRL_BEPALING"),
-                    entity_data_id
-                )
-                if bepaling in seen_libconstrl:
-                    continue
-                seen_libconstrl.add(bepaling)
-
-            # ── 5. INSTALLATIE: dedup op installatienaam ──────────────────────
+            # INSTALLATIE: dedup op naam
             if eid == "INSTALLATIE":
                 naam = next(
                     (p.get("Value", "") for p in e.get("NTAPropertyDatas", [])
                      if p.get("NTAPropertyId") == "INSTALL_NAAM"),
-                    entity_data_id
+                    entity_id,
                 )
                 if naam in seen_installatie:
                     continue
@@ -210,14 +223,19 @@ def merge_uniec3(file_objects):
 
             entry = dict(e)
             entry["BuildingId"] = new_bid
-            # Zet het berekeningstype altijd op projectberekening
+
+            # Zet berekeningstype op projectberekening
             if eid == "RZFORM":
                 for p in entry.get("NTAPropertyDatas", []):
                     if p.get("NTAPropertyId") == "RZFORM_CALCUNIT":
                         p["Value"] = "RZUNIT_PROJECT"
-            merged_entities.append(entry)
 
-    # ── Relaties samenvoegen (dedup op relatie-ID) ────────────────────────────
+            other_entities.append(entry)
+
+    # ── Stap 4: ID-remap toepassen op alle entiteiten ─────────────────────────
+    merged_entities = deduped_lib + [_apply_remap(e, id_remap) for e in other_entities]
+
+    # ── Stap 5: Relaties samenvoegen + remap + dedup ──────────────────────────
     seen_relation_ids = set()
     merged_relations  = []
     for k in kavels:
@@ -227,9 +245,9 @@ def merge_uniec3(file_objects):
                 continue
             if rid:
                 seen_relation_ids.add(rid)
-            merged_relations.append(dict(r, BuildingId=new_bid))
+            merged_relations.append(_apply_remap(dict(r, BuildingId=new_bid), id_remap))
 
-    # ── Deltas samenvoegen (dedup op delta-ID) ────────────────────────────────
+    # ── Stap 6: Deltas samenvoegen + remap + dedup ────────────────────────────
     seen_delta_ids = set()
     merged_deltas  = []
     for k in kavels:
@@ -239,7 +257,7 @@ def merge_uniec3(file_objects):
                 continue
             if did:
                 seen_delta_ids.add(did)
-            merged_deltas.append(dict(d, BuildingId=new_bid))
+            merged_deltas.append(_apply_remap(dict(d, BuildingId=new_bid), id_remap))
 
     summary = dict(first["summary"])
     summary["BuildingId"] = new_bid
@@ -256,5 +274,5 @@ def merge_uniec3(file_objects):
         zout.writestr(f"buildings/{new_bid}/deltas.json",    encode_json(merged_deltas))
         zout.writestr(f"buildings/{new_bid}/summary.json",   encode_json(summary))
 
-    n_units = sum(1 for e in merged_entities if e["NTAEntityId"] == "UNIT")
+    n_units = sum(1 for e in merged_entities if e.get("NTAEntityId") == "UNIT")
     return buf.getvalue(), n_units
