@@ -41,6 +41,12 @@ LIB_PREFIXES = (
     "KOEL",   # KOEL, KOEL-AFG, KOEL-DISTR, KOEL-OPWEK, …
 )
 
+# Root-installaties: altijd singleton (eerste woning wint).
+# Content-hash dedup werkt niet als twee bronbestanden licht afwijkende
+# instellingen hebben (bijv. VERW_OPEN verschilt) — dan blijft een dubbele
+# VERW/TAPW/KOEL over die geen INSTALLATIE-parent meer heeft → importfout.
+INSTALL_SINGLETONS = {"TAPW", "VERW", "KOEL"}
+
 # Per-woning-entiteiten: altijd multi (van alle kavels).
 MULTI_EXACT    = {"RZ"}
 MULTI_PREFIXES = ("UNIT",)
@@ -171,9 +177,14 @@ def merge_uniec3(file_objects):
     # Voor elk LIB*-type: bij dubbele inhoud → canonical ID bewaren,
     # duplicaat-ID opnemen in id_remap zodat verwijzingen daarnaar worden
     # bijgewerkt naar het canonical exemplaar.
-    lib_content_seen: dict[str, str] = {}   # content_hash → canonical NTAEntityDataId
-    id_remap:         dict[str, str] = {}   # duplicate_id → canonical_id
-    deduped_lib:      list           = []   # unieke LIB*-entiteiten
+    #
+    # INSTALL_SINGLETONS (TAPW/VERW/KOEL): altijd eerste-kavel-wint,
+    # ongeacht inhoud. Voorkomt dat licht afwijkende root-installaties
+    # dubbel in het bestand belanden met een losse (ouderlooze) kopie.
+    lib_content_seen:     dict[str, str] = {}   # content_hash → canonical NTAEntityDataId
+    install_single_seen:  dict[str, str] = {}   # NTAEntityId  → canonical NTAEntityDataId
+    id_remap:             dict[str, str] = {}   # duplicate_id → canonical_id
+    deduped_lib:          list           = []   # unieke LIB*-entiteiten
 
     for k in kavels:
         for e in k["entities"]:
@@ -182,8 +193,23 @@ def merge_uniec3(file_objects):
                 continue
             if _is_result(eid):
                 continue
-            ck     = _content_key(e)
             old_id = e.get("NTAEntityDataId", "")
+
+            # Root-installaties: singleton (eerste woning wint)
+            if eid in INSTALL_SINGLETONS:
+                if eid in install_single_seen:
+                    canonical_id = install_single_seen[eid]
+                    if old_id and old_id != canonical_id:
+                        id_remap[old_id] = canonical_id
+                else:
+                    install_single_seen[eid] = old_id
+                    entry = dict(e)
+                    entry["BuildingId"] = new_bid
+                    deduped_lib.append(entry)
+                continue
+
+            # Overige LIB*: content-hash dedup
+            ck = _content_key(e)
             if ck in lib_content_seen:
                 canonical_id = lib_content_seen[ck]
                 if old_id and old_id != canonical_id:
