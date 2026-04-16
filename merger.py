@@ -235,29 +235,50 @@ def merge_uniec3(file_objects):
     # ── Stap 4: ID-remap toepassen op alle entiteiten ─────────────────────────
     merged_entities = deduped_lib + [_apply_remap(e, id_remap) for e in other_entities]
 
-    # ── Stap 5: Relaties samenvoegen + remap + dedup ──────────────────────────
+    # Set van geldige entity-IDs in het eindresultaat (voor relatie-filtering)
+    valid_entity_ids = {
+        e.get("NTAEntityDataId", "")
+        for e in merged_entities
+        if e.get("NTAEntityDataId")
+    }
+
+    # ── Stap 5: Relaties samenvoegen + remap + dedup + filteren ──────────────
+    # Gebruik NTAEntityRelationDataId (ParentId:ChildId) als dedup-sleutel.
+    # Filter relaties waarvan Parent of Child niet meer bestaat (o.a. RESULT-*).
     seen_relation_ids = set()
     merged_relations  = []
     for k in kavels:
         for r in k["relations"]:
-            rid = r.get("NTARelationId") or r.get("Id") or r.get("id") or ""
-            if rid and rid in seen_relation_ids:
-                continue
+            r2 = _apply_remap(dict(r, BuildingId=new_bid), id_remap)
+
+            # Dedup op composite relatie-ID
+            rid = r2.get("NTAEntityRelationDataId") or ""
             if rid:
+                if rid in seen_relation_ids:
+                    continue
                 seen_relation_ids.add(rid)
-            merged_relations.append(_apply_remap(dict(r, BuildingId=new_bid), id_remap))
+
+            # Sla relaties over met ontbrekende parent of child
+            parent_id = r2.get("ParentId", "")
+            child_id  = r2.get("ChildId", "")
+            if (parent_id and parent_id not in valid_entity_ids) or \
+               (child_id  and child_id  not in valid_entity_ids):
+                continue
+
+            merged_relations.append(r2)
 
     # ── Stap 6: Deltas samenvoegen + remap + dedup ────────────────────────────
     seen_delta_ids = set()
     merged_deltas  = []
     for k in kavels:
         for d in k["deltas"]:
-            did = d.get("NTADeltaId") or d.get("Id") or d.get("id") or ""
-            if did and did in seen_delta_ids:
-                continue
+            d2  = _apply_remap(dict(d, BuildingId=new_bid), id_remap)
+            did = d2.get("NTADeltaId") or d2.get("Id") or d2.get("id") or ""
             if did:
+                if did in seen_delta_ids:
+                    continue
                 seen_delta_ids.add(did)
-            merged_deltas.append(_apply_remap(dict(d, BuildingId=new_bid), id_remap))
+            merged_deltas.append(d2)
 
     summary = dict(first["summary"])
     summary["BuildingId"] = new_bid
