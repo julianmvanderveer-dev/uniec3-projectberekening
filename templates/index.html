@@ -57,7 +57,7 @@
       <path d="M12 16V4m0 0L8 8m4-4 4 4"/><path d="M20 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"/>
     </svg>
     <p>Sleep bestanden hierheen of <span id="browse-link">blader</span></p>
-    <p style="font-size:.8rem;color:#aaa;margin-top:4px;">Alleen .uniec3 bestanden · Minimaal 2</p>
+    <p style="font-size:.8rem;color:#aaa;margin-top:4px;">Alleen .uniec3 bestanden · 1 verzamelbestand of meerdere losse bestanden</p>
   </div>
   <input type="file" id="file-input" multiple accept=".uniec3">
   <ul id="file-list"></ul>
@@ -117,7 +117,7 @@
         <button type="button" onclick="removeFile(${i})">✕</button>`;
       fileList.appendChild(li);
     });
-    nextBtn.disabled = files.length < 2;
+    nextBtn.disabled = files.length < 1;
     errorBox.style.display = "none";
   }
 
