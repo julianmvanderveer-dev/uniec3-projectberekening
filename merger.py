@@ -31,14 +31,11 @@ _UUID_RE = re.compile(
 RESULT_EXACT    = {"PRESTATIE"}
 RESULT_PREFIXES = ("RESULT-",)
 
-# Gedeelde systeemdefinities: dedup op inhoud + ID-remapping.
-# Dit zijn entiteiten die per woning worden gekopieerd maar inhoudelijk
-# identiek zijn (bibliotheek, installaties).
+# Gedeelde bibliotheekdefinities: dedup op inhoud + ID-remapping.
+# Alleen LIB*-typen: Uniec3 verwacht voor installaties (TAPW/VERW/KOEL)
+# een eigen exemplaar per woning en kan niet omgaan met gedeelde instanties.
 LIB_PREFIXES = (
     "LIB",    # LIBCONSTRD, LIBCONSTRT, LIBCONSTRL, LIBCONSTRFORM, …
-    "TAPW",   # TAPW, TAPW-AFG, TAPW-DISTR, TAPW-OPWEK, TAPW-UNIT, …
-    "VERW",   # VERW, VERW-AFG, VERW-DISTR, VERW-OPWEK, …
-    "KOEL",   # KOEL, KOEL-AFG, KOEL-DISTR, KOEL-OPWEK, …
 )
 
 # Per-woning-entiteiten: altijd multi (van alle kavels).
