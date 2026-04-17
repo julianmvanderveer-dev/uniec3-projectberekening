@@ -2,14 +2,12 @@
 Uniec3 merge-logica: voegt losse woningberekeningen samen tot één projectberekening.
 
 Deduplicatiestrategie:
-- LIB*-entiteiten (bouwkundige bibliotheek): gededupliceerd op inhoud (UUID-vrij),
-  met ID-remapping zodat alle verwijzingen naar duplicaten naar het
-  behouden exemplaar wijzen.
-- TAPW/VERW/KOEL (installaties): per-woning bewaard. Uniec3 vereist een eigen
-  installatie-set per woning; delen van installaties over woningen heen
-  veroorzaakt een importfout.
+- LIB*-entiteiten (bouwkundige bibliotheek): gededupliceerd op inhoud (UUID-vrij).
+- RZ (rekenzones): gededupliceerd op inhoud — identieke woningtypen delen 1 RZ.
+- Systeem-niveau VERW/TAPW/KOEL: gededupliceerd op inhoud.
+  Per-woning entiteiten (VERW-OPWEK, UNIT-VERW, etc.) blijven per woning.
 - RESULT-*: uitgesloten (herberekend door Uniec3 zelf).
-- UNIT / RZ / *: per-woning-entiteiten, meegenomen van alle kavels.
+- UNIT / UNIT-* / BEGR etc.: per-woning, meegenomen van alle kavels.
 - Overige singletons (RZFORM etc.): uitsluitend van het eerste kavel.
 """
 
@@ -31,30 +29,45 @@ _UUID_RE = re.compile(
 # ── Categorieën ────────────────────────────────────────────────────────────────
 
 # Berekeningsresultaten: niet overnemen (Uniec3 herberekent ze).
-RESULT_EXACT    = set()
 RESULT_PREFIXES = ("RESULT-",)
 
-# Gedeelde bibliotheek-entiteiten: dedup op inhoud (UUID-vrij) + ID-remapping.
-# Alleen LIB*-typen (bouwkundige bibliotheek). TAPW/VERW/KOEL zijn per-woning.
-LIB_PREFIXES = (
-    "LIB",    # LIBCONSTRD, LIBCONSTRT, LIBCONSTRL, LIBCONSTRFORM, …
-)
+# Entiteiten die content-hash dedup krijgen (UUID-vrij hash → 1 canonical per unieke inhoud).
+# LIB* = bouwkundige bibliotheek
+# RZ   = rekenzone profiel (gedeeld per woningtype)
+# Systeem-niveau VERW/TAPW/KOEL (per-woning entiteiten zoals VERW-OPWEK staan hier NIET in)
+LIB_EXACT: frozenset[str] = frozenset({
+    # Bouwkundige bibliotheek
+    "LIBCONSTRD", "LIBCONSTRT", "LIBCONSTRL", "LIBCONSTRFORM",
+    # Rekenzone profiel
+    "RZ",
+    # Installatie – systeem-niveau verwarming
+    "VERW", "VERW-AFG", "VERW-AFG-VENT",
+    "VERW-DISTR", "VERW-DISTR-BUI", "VERW-DISTR-EIG", "VERW-DISTR-POMP", "VERW-VAT",
+    # Installatie – systeem-niveau warm tapwater
+    "TAPW", "TAPW-AFG", "TAPW-DISTR", "TAPW-VAT",
+    "TAPW-DISTR-BUI", "TAPW-DISTR-EIG", "TAPW-DISTR-POMP",
+    "TAPW-DOUCHE", "TAPW-DOUCHE-AANG", "TAPW-UNIT",
+    # Installatie – systeem-niveau koeling
+    "KOEL", "KOEL-AFG", "KOEL-AFG-VENT",
+    "KOEL-DISTR", "KOEL-DISTR-BUI", "KOEL-DISTR-EIG", "KOEL-DISTR-POMP",
+    # Installatie – INSTALLATIE (koppelentiteit; dedup op naam+type)
+    "INSTALLATIE",
+})
 
 # Per-woning-entiteiten: altijd multi (van alle kavels).
-MULTI_EXACT    = {"RZ"}
 MULTI_PREFIXES = ("UNIT",)
 
 
 def _is_result(eid: str) -> bool:
-    return eid in RESULT_EXACT or any(eid.startswith(p) for p in RESULT_PREFIXES)
+    return any(eid.startswith(p) for p in RESULT_PREFIXES)
 
 
 def _is_lib(eid: str) -> bool:
-    return any(eid.startswith(p) for p in LIB_PREFIXES)
+    return eid in LIB_EXACT or eid.startswith("LIB")
 
 
 def _is_forced_multi(eid: str) -> bool:
-    return eid in MULTI_EXACT or any(eid.startswith(p) for p in MULTI_PREFIXES)
+    return any(eid.startswith(p) for p in MULTI_PREFIXES)
 
 
 def _content_key(e: dict) -> str:
@@ -204,10 +217,9 @@ def merge_uniec3(file_objects):
         return any(c.get(eid, 0) > 1 for c in type_counts)
 
     # ── Stap 3: Overige entiteiten samenvoegen ────────────────────────────────
-    other_entities   = []
-    seen_entity_ids  = set()
-    seen_singletons  = set()
-    seen_installatie = set()
+    other_entities  = []
+    seen_entity_ids = set()
+    seen_singletons = set()
 
     for kavel_idx, k in enumerate(kavels):
         is_first = (kavel_idx == 0)
@@ -215,7 +227,7 @@ def merge_uniec3(file_objects):
         for e in k["entities"]:
             eid = e.get("NTAEntityId", "")
 
-            # LIB* al verwerkt in stap 1
+            # LIB_EXACT + LIB* al verwerkt in stap 1
             if _is_lib(eid):
                 continue
 
@@ -235,17 +247,6 @@ def merge_uniec3(file_objects):
                 if eid in seen_singletons:
                     continue
                 seen_singletons.add(eid)
-
-            # INSTALLATIE: dedup op naam
-            if eid == "INSTALLATIE":
-                naam = next(
-                    (p.get("Value", "") for p in e.get("NTAPropertyDatas", [])
-                     if p.get("NTAPropertyId") == "INSTALL_NAAM"),
-                    entity_id,
-                )
-                if naam in seen_installatie:
-                    continue
-                seen_installatie.add(naam)
 
             entry = dict(e)
             entry["BuildingId"] = new_bid
