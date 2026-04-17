@@ -57,6 +57,8 @@ INSTALL_SINGLETONS = {
     "KOEL-DISTR", "KOEL-DISTR-BUI", "KOEL-DISTR-EIG", "KOEL-DISTR-POMP",
     # Systeem-niveau TAPW (1 per installatie)
     "TAPW-AFG", "TAPW-DISTR", "TAPW-VAT",
+    "TAPW-DISTR-BUI", "TAPW-DISTR-EIG", "TAPW-DISTR-POMP",
+    "TAPW-DOUCHE", "TAPW-DOUCHE-AANG",
 }
 
 # Per-woning-entiteiten: altijd multi (van alle kavels).
