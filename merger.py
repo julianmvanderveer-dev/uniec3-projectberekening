@@ -5,7 +5,10 @@ Deduplicatiestrategie:
 - LIB*-entiteiten (bouwkundige bibliotheek): gededupliceerd op inhoud (UUID-vrij),
   met ID-remapping zodat alle verwijzingen naar duplicaten naar het
   behouden exemplaar wijzen.
-- RESULT-* / PRESTATIE: uitgesloten (herberekend door Uniec3 zelf).
+- TAPW/VERW/KOEL (installaties): per-woning bewaard. Uniec3 vereist een eigen
+  installatie-set per woning; delen van installaties over woningen heen
+  veroorzaakt een importfout.
+- RESULT-*: uitgesloten (herberekend door Uniec3 zelf).
 - UNIT / RZ / *: per-woning-entiteiten, meegenomen van alle kavels.
 - Overige singletons (RZFORM etc.): uitsluitend van het eerste kavel.
 """
@@ -28,38 +31,14 @@ _UUID_RE = re.compile(
 # ── Categorieën ────────────────────────────────────────────────────────────────
 
 # Berekeningsresultaten: niet overnemen (Uniec3 herberekent ze).
-RESULT_EXACT    = {"PRESTATIE"}
+RESULT_EXACT    = set()
 RESULT_PREFIXES = ("RESULT-",)
 
-# Gedeelde systeemdefinities: dedup op inhoud (UUID-vrij) + ID-remapping.
-# Van elke unieke installatie/bibliotheek wordt het eerste exemplaar bewaard;
-# alle andere woningen worden via id_remap daarnaar doorverwezen.
+# Gedeelde bibliotheek-entiteiten: dedup op inhoud (UUID-vrij) + ID-remapping.
+# Alleen LIB*-typen (bouwkundige bibliotheek). TAPW/VERW/KOEL zijn per-woning.
 LIB_PREFIXES = (
     "LIB",    # LIBCONSTRD, LIBCONSTRT, LIBCONSTRL, LIBCONSTRFORM, …
-    "TAPW",   # TAPW, TAPW-AFG, TAPW-DISTR, TAPW-OPWEK, TAPW-UNIT, …
-    "VERW",   # VERW, VERW-AFG, VERW-DISTR, VERW-OPWEK, …
-    "KOEL",   # KOEL, KOEL-AFG, KOEL-DISTR, KOEL-OPWEK, …
 )
-
-# Installatie-entiteiten die altijd singleton zijn (eerste woning wint).
-# Content-hash dedup werkt niet als twee bronbestanden licht afwijkende
-# instellingen hebben — dan blijven dubbele systeem-entiteiten over die
-# Uniec3 niet aankan (importfout).
-# Per-woning entiteiten (*-OPWEK, *-BIN, *-UNIT) blijven content-hash dedup.
-INSTALL_SINGLETONS = {
-    # Root-niveau
-    "TAPW", "VERW", "KOEL",
-    # Systeem-niveau VERW (1 per installatie)
-    "VERW-AFG", "VERW-AFG-VENT",
-    "VERW-DISTR", "VERW-DISTR-BUI", "VERW-DISTR-EIG", "VERW-DISTR-POMP",
-    # Systeem-niveau KOEL (1 per installatie)
-    "KOEL-AFG", "KOEL-AFG-VENT",
-    "KOEL-DISTR", "KOEL-DISTR-BUI", "KOEL-DISTR-EIG", "KOEL-DISTR-POMP",
-    # Systeem-niveau TAPW (1 per installatie)
-    "TAPW-AFG", "TAPW-DISTR", "TAPW-VAT",
-    "TAPW-DISTR-BUI", "TAPW-DISTR-EIG", "TAPW-DISTR-POMP",
-    "TAPW-DOUCHE", "TAPW-DOUCHE-AANG",
-}
 
 # Per-woning-entiteiten: altijd multi (van alle kavels).
 MULTI_EXACT    = {"RZ"}
@@ -187,18 +166,14 @@ def merge_uniec3(file_objects):
     proj_building["BuildingId"] = new_bid
     proj_building["ChangeDate"] = now_iso
 
-    # ── Stap 1: Bibliotheek dedupliceren + ID-remap opbouwen ─────────────────
+    # ── Stap 1: Bouwkundige bibliotheek dedupliceren + ID-remap opbouwen ────────
     # Voor elk LIB*-type: bij dubbele inhoud → canonical ID bewaren,
     # duplicaat-ID opnemen in id_remap zodat verwijzingen daarnaar worden
     # bijgewerkt naar het canonical exemplaar.
-    #
-    # INSTALL_SINGLETONS (TAPW/VERW/KOEL): altijd eerste-kavel-wint,
-    # ongeacht inhoud. Voorkomt dat licht afwijkende root-installaties
-    # dubbel in het bestand belanden met een losse (ouderlooze) kopie.
-    lib_content_seen:     dict[str, str] = {}   # content_hash → canonical NTAEntityDataId
-    install_single_seen:  dict[str, str] = {}   # NTAEntityId  → canonical NTAEntityDataId
-    id_remap:             dict[str, str] = {}   # duplicate_id → canonical_id
-    deduped_lib:          list           = []   # unieke LIB*-entiteiten
+    # TAPW/VERW/KOEL zijn PER WONING en worden NIET hier verwerkt.
+    lib_content_seen: dict[str, str] = {}   # content_hash → canonical NTAEntityDataId
+    id_remap:         dict[str, str] = {}   # duplicate_id → canonical_id
+    deduped_lib:      list           = []   # unieke LIB*-entiteiten
 
     for k in kavels:
         for e in k["entities"]:
@@ -209,20 +184,6 @@ def merge_uniec3(file_objects):
                 continue
             old_id = e.get("NTAEntityDataId", "")
 
-            # Root-installaties: singleton (eerste woning wint)
-            if eid in INSTALL_SINGLETONS:
-                if eid in install_single_seen:
-                    canonical_id = install_single_seen[eid]
-                    if old_id and old_id != canonical_id:
-                        id_remap[old_id] = canonical_id
-                else:
-                    install_single_seen[eid] = old_id
-                    entry = dict(e)
-                    entry["BuildingId"] = new_bid
-                    deduped_lib.append(entry)
-                continue
-
-            # Overige LIB*: content-hash dedup
             ck = _content_key(e)
             if ck in lib_content_seen:
                 canonical_id = lib_content_seen[ck]
