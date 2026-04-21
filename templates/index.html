@@ -70,10 +70,10 @@
 
   <button class="btn" id="merge-btn" disabled>
     <span class="spinner" id="spinner"></span>
-    <span id="btn-label">Maak projectberekening</span>
+    <span id="btn-label">Doorgaan naar betaling →</span>
   </button>
 
-  <div id="success-box">✓ Projectberekening aangemaakt — download gestart.</div>
+  <div id="success-box">✓ Bestanden verwerkt — even wachten…</div>
 </div>
 
 <script>
@@ -133,25 +133,22 @@
     form.append("bestandsnaam", naam);
 
     try {
-      const resp = await fetch("/merge", { method: "POST", body: form });
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({ error: "Onbekende fout." }));
-        throw new Error(data.error || resp.statusText);
+      const resp = await fetch("/upload", { method: "POST", body: form });
+      const data = await resp.json().catch(() => ({ error: "Onbekende fout." }));
+      if (!resp.ok) throw new Error(data.error || resp.statusText);
+      if (data.redirect) {
+        successBox.style.display = "block";
+        window.location.href = data.redirect;
+        return;
       }
-      const blob = await resp.blob();
-      const cd   = resp.headers.get("Content-Disposition") || "";
-      const name = (cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/) || [])[1]?.replace(/['"]/g,"") || `${naam}.uniec3`;
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement("a"); a.href = url; a.download = name; a.click();
-      URL.revokeObjectURL(url);
-      successBox.style.display = "block";
+      throw new Error("Onverwachte reactie van server.");
     } catch (err) {
       errorBox.textContent = err.message;
       errorBox.style.display = "block";
     } finally {
       mergeBtn.disabled = files.length < 1;
       spinner.style.display = "none";
-      btnLabel.textContent = "Maak projectberekening";
+      btnLabel.textContent = "Doorgaan naar betaling →";
     }
   });
 </script>
