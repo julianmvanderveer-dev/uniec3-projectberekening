@@ -6,7 +6,7 @@ class Config:
     TOOL_NAAM            = "Uniec3 Projectberekening Samensteller"
 
     # Prijsinstelling (excl. BTW, in euro)
-    PRIJS_EXCL_BTW: float = 9.92   # → incl. 21% BTW = € 12,00
+    PRIJS_EXCL_BTW: float = 100.00  # → incl. 21% BTW = € 121,00
     BTW_PCT:        float = 21.0
 
     # Admin-pagina wachtwoord (overschrijf via ADMIN_KEY env var)
