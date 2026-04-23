@@ -42,7 +42,7 @@ mollie.set_api_key(os.environ.get("MOLLIE_API_KEY", "test_xxxx"))
 
 # ── In-memory opslag ─────────────────────────────────────────────────────────
 _store: dict          = {}   # {file_id: {...}}
-_lock                 = threading.Lock()
+_lock                 = threading.RLock()  # RLock: zelfde thread mag meerdere keren acquiren
 _invoice_seq          = [1]  # [0] = volgende factuurnummer
 
 
