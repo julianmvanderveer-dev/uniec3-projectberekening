@@ -11,3 +11,6 @@ class Config:
 
     # Admin-pagina wachtwoord (overschrijf via ADMIN_KEY env var)
     ADMIN_KEY: str = os.environ.get("ADMIN_KEY", "admin")
+
+    # Betalings-bypass: kommagescheiden promocodes (leeg = nooit actief)
+    BYPASS_CODES: str = os.environ.get("BYPASS_CODES", "")

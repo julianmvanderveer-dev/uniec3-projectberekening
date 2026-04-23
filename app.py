@@ -222,6 +222,18 @@ def pay(file_id):
     with _lock:
         entry["customer"] = customer
 
+    # ── Betalings-bypass via promotiecode ─────────────────────────────────────
+    valid_codes = {
+        c.strip().upper()
+        for c in os.environ.get("BYPASS_CODES", Config.BYPASS_CODES).split(",")
+        if c.strip()
+    }
+    promo = request.form.get("promo_code", "").strip().upper()
+    if promo and promo in valid_codes:
+        _mark_paid(file_id, entry, payment_id="PROMO")
+        return redirect(url_for("success", file_id=file_id))
+    # ── Normale Mollie-flow ───────────────────────────────────────────────────
+
     try:
         payment = mollie.payments.create({
             "amount":      {"currency": "EUR", "value": f"{entry['incl']:.2f}"},
