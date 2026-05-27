@@ -22,6 +22,8 @@ import uuid
 import threading
 from datetime import datetime
 
+from PIL import Image as _PILImage
+
 from flask import (
     Flask, render_template, request, send_file,
     jsonify, redirect, url_for, flash,
@@ -31,6 +33,32 @@ from fpdf import FPDF
 
 from merger import merge_uniec3
 from config import Config
+
+# ── Logo voorbereiden ─────────────────────────────────────────────────────────
+# Verkleins het logo eenmalig bij opstarten naar max. 400 px breed zodat de
+# factuur-PDF compact blijft. Resultaat wordt in geheugen gecached.
+_LOGO_PATH = os.path.join(os.path.dirname(__file__), "static", "brynt_logo.png")
+_LOGO_SMALL_PATH = os.path.join(os.path.dirname(__file__), "static", "brynt_logo_small.png")
+
+def _prepare_logo():
+    if not os.path.exists(_LOGO_PATH):
+        return
+    if os.path.exists(_LOGO_SMALL_PATH):
+        return   # al voorbereid
+    try:
+        img = _PILImage.open(_LOGO_PATH).convert("RGBA")
+        max_w = 400
+        if img.width > max_w:
+            ratio = max_w / img.width
+            img = img.resize((max_w, int(img.height * ratio)), _PILImage.LANCZOS)
+        # Witte achtergrond (fpdf2 heeft JPEG liever dan transparante PNG voor kleine bestanden)
+        bg = _PILImage.new("RGB", img.size, (255, 255, 255))
+        bg.paste(img, mask=img.split()[3] if img.mode == "RGBA" else None)
+        bg.save(_LOGO_SMALL_PATH, "PNG", optimize=True)
+    except Exception:
+        pass
+
+_prepare_logo()
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -65,14 +93,39 @@ def _cleanup():
 
 
 def _generate_invoice_pdf(entry: dict) -> bytes:
-    """Genereer een eenvoudige factuur-PDF met fpdf2."""
+    """Genereer een factuur-PDF met fpdf2, inclusief Brynt-logo en bedrijfsgegevens."""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_margins(20, 20, 20)
 
-    # Koptekst
-    pdf.set_font("Helvetica", "B", 18)
-    pdf.cell(0, 12, "Factuur", ln=True)
+    # ── Koptekst: logo links, bedrijfsgegevens rechts ─────────────────────────
+    logo_path = _LOGO_SMALL_PATH if os.path.exists(_LOGO_SMALL_PATH) else _LOGO_PATH
+    if os.path.exists(logo_path):
+        pdf.image(logo_path, x=20, y=15, h=18)   # hoogte 18 mm, breedte proportioneel
+
+    # Bedrijfsgegevens rechtsboven
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(80, 80, 80)
+    pdf.set_xy(120, 15)
+    pdf.cell(0, 5, "Brynt", ln=True)
+    pdf.set_x(120)
+    pdf.cell(0, 5, "Oranjelaan 3G1", ln=True)
+    pdf.set_x(120)
+    pdf.cell(0, 5, "3311 DH  Dordrecht", ln=True)
+    pdf.set_x(120)
+    pdf.cell(0, 5, "www.brynt.nl", ln=True)
+
+    # Scheidingslijn onder koptekst
+    pdf.set_draw_color(0, 120, 212)
+    pdf.set_line_width(0.5)
+    pdf.line(20, 38, 190, 38)
+    pdf.ln(0)
+    pdf.set_y(42)
+
+    # ── Factuurgegevens ───────────────────────────────────────────────────────
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 10, "Factuur", ln=True)
     pdf.set_font("Helvetica", "", 10)
     pdf.cell(0, 6, f"Factuurnummer : {entry['invoice_nr']}", ln=True)
     pdf.cell(0, 6, f"Factuurdatum  : {entry['invoice_date']}", ln=True)
