@@ -26,6 +26,21 @@ _UUID_RE = re.compile(
     re.IGNORECASE,
 )
 
+# ── Patroon voor berekende resultaatwaarden (high-precision floats) ────────────
+# Getallen met 3+ decimalen zijn vrijwel altijd berekeningsresultaten (bijv.
+# TAPW-OPWEK_BEHOEFTE = 2092,8618267521374). Ze worden uitgesloten van de
+# content-hash zodat identieke systemen correct als duplicaat worden herkend.
+_CALC_FLOAT_RE = re.compile(r'^-?\d+[,.]\d{3,}$')
+
+# ── Bekende resultaatproperties die NIET op '_NON' eindigen ───────────────────
+# Sommige berekeningsresultaten worden door Uniec3 opgeslagen zonder '_NON'-suffix.
+# Kavel[0] slaat ze soms als integer op (bijv. 1907), latere kavels als float
+# (bijv. 1907,3543...). Uitsluiting op naam voorkomt valse hash-verschillen.
+_CALC_PROPS: frozenset[str] = frozenset({
+    "TAPW-OPWEK_BEHOEFTE",   # tapwater energiebehoefte (berekend)
+    "TAPW-OPWEK_GELEV",      # geleverde tapwaterenergie (berekend)
+})
+
 # ── Categorieën ────────────────────────────────────────────────────────────────
 
 # Berekeningsresultaten: niet overnemen (Uniec3 herberekent ze).
@@ -48,6 +63,8 @@ LIB_EXACT: frozenset[str] = frozenset({
     "TAPW-DISTR-BUI", "TAPW-DISTR-EIG", "TAPW-DISTR-POMP",
     "TAPW-DOUCHE", "TAPW-DOUCHE-AANG",
     # TAPW-UNIT staat NIET hier — is per-woning junction (zie MULTI_EXACT)
+    # Opwekkers: dedup op inhoud zodat identieke systemen gedeeld worden
+    "VERW-OPWEK", "TAPW-OPWEK", "KOEL-OPWEK",
     # Installatie – systeem-niveau koeling
     "KOEL", "KOEL-AFG", "KOEL-AFG-VENT",
     "KOEL-DISTR", "KOEL-DISTR-BUI", "KOEL-DISTR-EIG", "KOEL-DISTR-POMP",
@@ -82,15 +99,29 @@ def _is_forced_multi(eid: str) -> bool:
 
 
 def _content_key(e: dict) -> str:
-    """Hash van entity-inhoud zonder UUID-waarden.
-    Twee entiteiten met identieke eigenschappen maar andere ID's
-    (bijv. gekopieerde bibliotheek per woning) krijgen dezelfde hash."""
+    """Hash van entity-inhoud op basis van invoerparameters.
+    Uitgesloten:
+    - UUID-waarden  (verwijzingen naar andere entiteiten)
+    - Properties die eindigen op '_NON'  (berekende resultaatwaarden die per
+      woning kunnen verschillen maar geen deel uitmaken van de systeemkeuze)
+    - High-precision floats (3+ decimalen, bijv. TAPW-OPWEK_BEHOEFTE = 2092,86...)
+      Dit zijn berekeningsresultaten die niet op '_NON' eindigen maar toch per
+      woning verschillen en geen systeemkeuze representeren.
+    Zo worden twee entiteiten met identieke invoer maar verschillende berekenings-
+    resultaten correct als duplicaat herkend."""
     parts = [e.get("NTAEntityId", "")]
     for p in sorted(e.get("NTAPropertyDatas", []), key=lambda x: x.get("NTAPropertyId", "")):
+        prop_id = p.get("NTAPropertyId", "")
+        if prop_id.endswith("_NON"):
+            continue   # sla berekende resultaatwaarden over
+        if prop_id in _CALC_PROPS:
+            continue   # sla bekende resultaatproperties over (ook zonder _NON-suffix)
         val = str(p.get("Value", ""))
         if _UUID_RE.match(val):
             continue   # sla ID-referenties over
-        parts.append(f"{p.get('NTAPropertyId', '')}={val}")
+        if _CALC_FLOAT_RE.match(val):
+            continue   # sla berekeningsresultaten met hoge precisie over
+        parts.append(f"{prop_id}={val}")
     return hashlib.md5("|".join(parts).encode()).hexdigest()
 
 
@@ -228,9 +259,13 @@ def merge_uniec3(file_objects):
         return any(c.get(eid, 0) > 1 for c in type_counts)
 
     # ── Stap 3: Overige entiteiten samenvoegen ────────────────────────────────
-    other_entities  = []
-    seen_entity_ids = set()
-    seen_singletons = set()
+    # singleton_canonical: eid → canonical NTAEntityDataId (kavel[0]-exemplaar)
+    # Latere kavels' singleton-IDs worden via id_remap naar canonical omgezet
+    # zodat relaties van multi-entiteiten (bijv. INSTALLATIE→VENT) niet breken.
+    other_entities      = []
+    seen_entity_ids     = set()
+    seen_singletons     = set()
+    singleton_canonical: dict[str, str] = {}
 
     for kavel_idx, k in enumerate(kavels):
         is_first = (kavel_idx == 0)
@@ -253,11 +288,17 @@ def merge_uniec3(file_objects):
                     continue
                 seen_entity_ids.add(entity_id)
 
-            # Singletons: alleen eerste kavel
+            # Singletons: alleen eerste kavel bewaren.
+            # Latere kavels: ID toevoegen aan id_remap → canonical, zodat
+            # verwijzingen vanuit multi-entiteiten correct worden bijgewerkt.
             if not is_multi(eid):
                 if eid in seen_singletons:
+                    if entity_id and eid in singleton_canonical:
+                        id_remap[entity_id] = singleton_canonical[eid]
                     continue
                 seen_singletons.add(eid)
+                if entity_id:
+                    singleton_canonical[eid] = entity_id
 
             entry = dict(e)
             entry["BuildingId"] = new_bid
