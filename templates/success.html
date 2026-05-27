@@ -28,6 +28,12 @@
     .back { display: block; margin-top: 16px; font-size: .85rem; color: #0078d4;
             text-decoration: none; }
     .back:hover { text-decoration: underline; }
+    .warning { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px;
+               padding: 14px 16px; margin-top: 24px; text-align: left; }
+    .warning-title { font-size: .85rem; font-weight: 700; color: #92400e; margin-bottom: 6px; }
+    .warning-body { font-size: .82rem; color: #78350f; line-height: 1.5; }
+    .warning-body ol { padding-left: 18px; margin-top: 6px; }
+    .warning-body li { margin-bottom: 3px; }
   </style>
 </head>
 <body>
@@ -45,6 +51,20 @@
   <div class="btn-group">
     <a href="/download/{{ file_id }}" class="btn btn-primary">⬇ Download projectberekening</a>
     <a href="/download-invoice/{{ file_id }}" class="btn btn-secondary">🧾 Download factuur (PDF)</a>
+  </div>
+
+  <div class="warning">
+    <div class="warning-title">⚠ Let op: installaties handmatig controleren</div>
+    <div class="warning-body">
+      De installaties (verwarming, warm tapwater, ventilatie) zijn overgenomen uit de eerste
+      woningberekening, maar kloppen mogelijk niet voor het hele project. Controleer en herstel
+      dit na het openen in Uniec3:
+      <ol>
+        <li>Open het gedownloade bestand in Uniec3.</li>
+        <li>Ga naar <strong>Installaties</strong> en verwijder de bestaande installaties.</li>
+        <li>Voeg de juiste installaties opnieuw toe voor het gehele project.</li>
+      </ol>
+    </div>
   </div>
 
   <a href="/" class="back">← Nieuwe samenvoeging</a>
