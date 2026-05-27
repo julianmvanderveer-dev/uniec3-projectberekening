@@ -46,7 +46,8 @@ LIB_EXACT: frozenset[str] = frozenset({
     # Installatie – systeem-niveau warm tapwater
     "TAPW", "TAPW-AFG", "TAPW-DISTR", "TAPW-VAT",
     "TAPW-DISTR-BUI", "TAPW-DISTR-EIG", "TAPW-DISTR-POMP",
-    "TAPW-DOUCHE", "TAPW-DOUCHE-AANG", "TAPW-UNIT",
+    "TAPW-DOUCHE", "TAPW-DOUCHE-AANG",
+    # TAPW-UNIT staat NIET hier — is per-woning junction (zie MULTI_EXACT)
     # Installatie – systeem-niveau koeling
     "KOEL", "KOEL-AFG", "KOEL-AFG-VENT",
     "KOEL-DISTR", "KOEL-DISTR-BUI", "KOEL-DISTR-EIG", "KOEL-DISTR-POMP",
@@ -54,7 +55,15 @@ LIB_EXACT: frozenset[str] = frozenset({
     "INSTALLATIE",
 })
 
-# Per-woning-entiteiten: altijd multi (van alle kavels).
+# Per-woning junction-entiteiten: altijd multi (1 per woning, ook al zijn ze inhoudelijk identiek).
+# TAPW-UNIT koppelt TAPW (gedeeld systeem) aan elke individuele UNIT — UUID-referentie naar UNIT
+# wordt uitgesloten van de content-hash, waardoor alle exemplaren identiek lijken en ten onrechte
+# tot 1 worden gereduceerd als TAPW-UNIT in LIB_EXACT zit.
+MULTI_EXACT: frozenset[str] = frozenset({
+    "TAPW-UNIT",   # TAPW ↔ UNIT koppeling, 1 per woning
+})
+
+# Per-woning-entiteiten via prefix: altijd multi (van alle kavels).
 MULTI_PREFIXES = ("UNIT",)
 
 
@@ -67,6 +76,8 @@ def _is_lib(eid: str) -> bool:
 
 
 def _is_forced_multi(eid: str) -> bool:
+    if eid in MULTI_EXACT:
+        return True
     return any(eid.startswith(p) for p in MULTI_PREFIXES)
 
 
