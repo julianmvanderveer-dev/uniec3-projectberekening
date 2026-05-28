@@ -47,6 +47,13 @@ _CALC_PROPS: frozenset[str] = frozenset({
 RESULT_PREFIXES = ("RESULT-",)
 RESULT_EXACT:    frozenset[str] = frozenset({"PRESTATIE"})  # per-woning resultaat
 
+# Afmeld-entiteiten: NIET overnemen in merged output.
+# Als een bronbestand formeel is afgemeld (ingediend voor energielabel), bevatten
+# deze entiteiten een vergrendelde "original"-staat. Wordt die meegenomen in het
+# merged output, dan geeft Uniec3 InvalidDataException bij herberekening:
+# "[InvalidDataException] while initializing CalculationHandler, original."
+AFMELD_PREFIXES = ("AFMELD",)
+
 # Entiteiten die content-hash dedup krijgen (UUID-vrij hash → 1 canonical per unieke inhoud).
 # LIB*    = bouwkundige bibliotheek (LIBCONSTRL etc.)
 # CONSTR* = bouwkundige constructie-entiteiten (CONSTRL, CONSTRD, CONSTRT, …)
@@ -97,7 +104,9 @@ MULTI_PREFIXES = ("UNIT",)
 
 
 def _is_result(eid: str) -> bool:
-    return eid in RESULT_EXACT or any(eid.startswith(p) for p in RESULT_PREFIXES)
+    return (eid in RESULT_EXACT
+            or any(eid.startswith(p) for p in RESULT_PREFIXES)
+            or any(eid.startswith(p) for p in AFMELD_PREFIXES))
 
 
 def _is_lib(eid: str) -> bool:
