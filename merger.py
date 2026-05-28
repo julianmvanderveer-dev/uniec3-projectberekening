@@ -45,14 +45,27 @@ _CALC_PROPS: frozenset[str] = frozenset({
 
 # Berekeningsresultaten: niet overnemen (Uniec3 herberekent ze).
 RESULT_PREFIXES = ("RESULT-",)
+RESULT_EXACT:    frozenset[str] = frozenset({"PRESTATIE"})  # per-woning resultaat
 
 # Entiteiten die content-hash dedup krijgen (UUID-vrij hash → 1 canonical per unieke inhoud).
-# LIB* = bouwkundige bibliotheek
-# RZ   = rekenzone profiel (gedeeld per woningtype)
-# Systeem-niveau VERW/TAPW/KOEL (per-woning entiteiten zoals VERW-OPWEK staan hier NIET in)
+# LIB*    = bouwkundige bibliotheek (LIBCONSTRL etc.)
+# CONSTR* = bouwkundige constructie-entiteiten (CONSTRL, CONSTRD, CONSTRT, …)
+#           Waren aanwezig t/m commit a3214d2, per ongeluk verdwenen bij herschrijving b7309bc.
+# RZ      = rekenzone profiel (gedeeld per woningtype)
+# Systeem-niveau VERW/TAPW/KOEL
 LIB_EXACT: frozenset[str] = frozenset({
     # Bouwkundige bibliotheek
     "LIBCONSTRD", "LIBCONSTRT", "LIBCONSTRL", "LIBCONSTRFORM",
+    # Bouwkundige constructie-entiteiten (per element, maar identiek bij gelijke woningen)
+    "CONSTRL", "CONSTRD", "CONSTRT",
+    "BEGR",
+    "BELEMMERING",
+    "CONSTRKRVENT", "CONSTRZOMNAC",
+    "CONSTRKENMV", "CONSTRKENMW",
+    "CONSTRWG", "CONSTRWWGVL", "CONSTRWWKLDR",
+    "CONSTRERROR",
+    "INFILUNIT",
+    "PV-VELD",
     # Rekenzone profiel
     "RZ",
     # Installatie – systeem-niveau verwarming
@@ -73,9 +86,6 @@ LIB_EXACT: frozenset[str] = frozenset({
 })
 
 # Per-woning junction-entiteiten: altijd multi (1 per woning, ook al zijn ze inhoudelijk identiek).
-# TAPW-UNIT koppelt TAPW (gedeeld systeem) aan elke individuele UNIT — UUID-referentie naar UNIT
-# wordt uitgesloten van de content-hash, waardoor alle exemplaren identiek lijken en ten onrechte
-# tot 1 worden gereduceerd als TAPW-UNIT in LIB_EXACT zit.
 MULTI_EXACT: frozenset[str] = frozenset({
     "TAPW-UNIT",   # TAPW ↔ UNIT koppeling, 1 per woning
 })
@@ -85,7 +95,7 @@ MULTI_PREFIXES = ("UNIT",)
 
 
 def _is_result(eid: str) -> bool:
-    return any(eid.startswith(p) for p in RESULT_PREFIXES)
+    return eid in RESULT_EXACT or any(eid.startswith(p) for p in RESULT_PREFIXES)
 
 
 def _is_lib(eid: str) -> bool:
