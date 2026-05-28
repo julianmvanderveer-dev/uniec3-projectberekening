@@ -56,16 +56,18 @@ RESULT_EXACT:    frozenset[str] = frozenset({"PRESTATIE"})  # per-woning resulta
 LIB_EXACT: frozenset[str] = frozenset({
     # Bouwkundige bibliotheek
     "LIBCONSTRD", "LIBCONSTRT", "LIBCONSTRL", "LIBCONSTRFORM",
-    # Bouwkundige constructie-entiteiten (per element, maar identiek bij gelijke woningen)
+    # Bouwkundige constructie-entiteiten (beschrijven de opbouw van bouwdelen;
+    # mogen gedeeld worden tussen woningen met dezelfde constructie).
+    # LET OP: BEGR (begrenzingsvlak) staat hier NIET — BEGR is kind van UNIT-RZ
+    #         en moet per woning uniek blijven, anders verdwijnen woningen in Uniec3.
+    # LET OP: INFILUNIT staat hier NIET — geen ouderrelatie gevonden, per woning.
     "CONSTRL", "CONSTRD", "CONSTRT",
-    "BEGR",
-    "BELEMMERING",
+    "BELEMMERING",      # ouder = VERW-OPWEK (gedeeld systeem)
     "CONSTRKRVENT", "CONSTRZOMNAC",
     "CONSTRKENMV", "CONSTRKENMW",
     "CONSTRWG", "CONSTRWWGVL", "CONSTRWWKLDR",
     "CONSTRERROR",
-    "INFILUNIT",
-    "PV-VELD",
+    "PV-VELD",          # ouder = PV (gedeeld systeem)
     # Rekenzone profiel
     "RZ",
     # Installatie – systeem-niveau verwarming
