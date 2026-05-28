@@ -233,6 +233,15 @@ def merge_uniec3(file_objects):
     proj_building["BuildingId"] = new_bid
     proj_building["ChangeDate"] = now_iso
 
+    # Zorg dat NTAVersionId minimaal 312 is (versie waarbij Uniec3 RZFORM_CALCUNIT
+    # respecteert). Bronkavels met versie 109 (oud formaat) laten Uniec3 altijd
+    # "per gebouw" tonen, ook als RZFORM_CALCUNIT=RZUNIT_PROJECT is ingesteld.
+    _MIN_NTA_VERSION = 312
+    max_src_version = max(
+        (k["building"].get("NTAVersionId") or 0) for k in kavels
+    )
+    proj_building["NTAVersionId"] = max(max_src_version, _MIN_NTA_VERSION)
+
     # ── Stap 1: Bouwkundige bibliotheek dedupliceren + ID-remap opbouwen ────────
     # Voor elk LIB*-type: bij dubbele inhoud → canonical ID bewaren,
     # duplicaat-ID opnemen in id_remap zodat verwijzingen daarnaar worden
