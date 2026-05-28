@@ -233,15 +233,6 @@ def merge_uniec3(file_objects):
     proj_building["BuildingId"] = new_bid
     proj_building["ChangeDate"] = now_iso
 
-    # Zorg dat NTAVersionId minimaal 312 is (versie waarbij Uniec3 RZFORM_CALCUNIT
-    # respecteert). Bronkavels met versie 109 (oud formaat) laten Uniec3 altijd
-    # "per gebouw" tonen, ook als RZFORM_CALCUNIT=RZUNIT_PROJECT is ingesteld.
-    _MIN_NTA_VERSION = 312
-    max_src_version = max(
-        (k["building"].get("NTAVersionId") or 0) for k in kavels
-    )
-    proj_building["NTAVersionId"] = max(max_src_version, _MIN_NTA_VERSION)
-
     # ── Stap 1: Bouwkundige bibliotheek dedupliceren + ID-remap opbouwen ────────
     # Voor elk LIB*-type: bij dubbele inhoud → canonical ID bewaren,
     # duplicaat-ID opnemen in id_remap zodat verwijzingen daarnaar worden
@@ -324,11 +315,24 @@ def merge_uniec3(file_objects):
             entry = dict(e)
             entry["BuildingId"] = new_bid
 
-            # Zet berekeningstype op projectberekening
+            # Zet berekeningstype op projectberekening.
+            # Status=3 = "door gebruiker ingesteld" (Uniec3 respecteert de waarde).
+            # Status=7 = "berekend/overridden" (Uniec3 negeert de waarde en toont
+            # "per gebouw" ook al staat Value op RZUNIT_PROJECT). Bronkavels gemaakt
+            # met NTAVersionId=109 hebben Status=7 op RZFORM_CALCUNIT — zonder
+            # expliciete Status-correctie werkt de RZUNIT_PROJECT-instelling niet.
             if eid == "RZFORM":
                 for p in entry.get("NTAPropertyDatas", []):
                     if p.get("NTAPropertyId") == "RZFORM_CALCUNIT":
-                        p["Value"] = "RZUNIT_PROJECT"
+                        p = dict(p)          # los van het origineel
+                        p["Value"]  = "RZUNIT_PROJECT"
+                        p["Status"] = 3      # forceer "door gebruiker ingesteld"
+                        # Vervang in de lijst
+                        props = list(entry.get("NTAPropertyDatas", []))
+                        idx = next(i for i, x in enumerate(props)
+                                   if x.get("NTAPropertyId") == "RZFORM_CALCUNIT")
+                        props[idx] = p
+                        entry["NTAPropertyDatas"] = props
 
             other_entities.append(entry)
 
